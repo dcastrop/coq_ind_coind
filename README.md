@@ -65,6 +65,6 @@ I think that `cofix build_branches ...` must terminate: every corecursive call m
 ```coq
   Lemma iso1 l : vseq_to_seq (seq_to_vseq l) = l.
 
-  Lemma iso2 n (v : vseq n) (p : size (vseq_to_seq v) = n) :
-    cast_vseq p (seq_to_vseq (vseq_to_seq v)) = v.
+  Lemma iso2 n (v : vseq n) :
+    cast_vseq (vseq_size v) (seq_to_vseq (vseq_to_seq v)) = v.
 ```
