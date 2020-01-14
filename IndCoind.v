@@ -52,7 +52,7 @@ Section CSeq.
     by rewrite /cast_vseq irr.
   Qed.
 
-  Lemma iso1 l : vseq_to_seq (seq_to_vseq l) = l.
+  Lemma viso1 l : vseq_to_seq (seq_to_vseq l) = l.
   Proof. by elim: l=>[|a l /=->]. Qed.
 
   Lemma vseq_size n (v : vseq n) : size (vseq_to_seq v) = n.
@@ -69,7 +69,7 @@ Section CSeq.
     by rewrite (nat_irrelevance p erefl) (nat_irrelevance p1 erefl)/=.
   Qed.
 
-  Lemma iso2 n (v : vseq n) :
+  Lemma viso2 n (v : vseq n) :
     cast_vseq (vseq_size v) (seq_to_vseq (vseq_to_seq v)) = v.
   Proof.
     elim: n v =>[|n Ih] v.
@@ -77,7 +77,45 @@ Section CSeq.
     - case Eq: _ / v =>[//|m h t]; move: Eq t=>[<-]t {m} /=.
       by rewrite cast_cons (nat_irrelevance (succ_inj _) (vseq_size t)) Ih.
   Qed.
+
+  Definition fseq := {n & vseq n}.
+  Definition f_nil : fseq := existT _ _ Nil.
+  Definition f_cons h t := existT _ _ (Cns h (projT2 t)).
+  Notation "[::]" := f_nil.
+  Notation "h :: t" := (f_cons h t).
+
+  Lemma fseq_ind (P : fseq -> Type) :
+    P [::] ->
+    (forall h t, P t -> P (h :: t)) ->
+    forall l, P l.
+  Proof.
+    move=>P_nil P_cons [n v].
+    elim: n => [|n Ih] in v *=>//=.
+    - by case E: _/v.
+    - case E:_ /v=>[//|m h t]; move: E Ih t=>[->]{n} Ih t.
+      by move: (P_cons h (existT _ _ t))=>/(_ (Ih t)).
+  Qed.
+
+  Definition fseq_to_seq v := vseq_to_seq (projT2 v).
+  Definition seq_to_fseq v := existT _ _ (seq_to_vseq v).
+
+  Lemma f_iso1 l : fseq_to_seq (seq_to_fseq l) = l.
+  Proof. by rewrite /fseq_to_seq/seq_to_fseq viso1. Qed.
+
+  Lemma roll_cons n h t :
+    existT vseq n.+1 (Cns h t) = h :: (existT vseq n t).
+  Proof. by []. Qed.
+
+  Lemma f_iso2 l : seq_to_fseq (fseq_to_seq l) = l.
+  Proof.
+    elim/fseq_ind: l=>//= h t Ih.
+    rewrite /seq_to_fseq/fseq_to_seq/=.
+    by rewrite roll_cons -/(fseq_to_seq _) -/(seq_to_fseq _) Ih.
+  Qed.
+
 End CSeq.
+
+Notation "'fseqB' v" := (existT _ _ v) (at level 0).
 
 Module Problem.
   CoInductive itree A := C : A -> seq (itree A) -> itree A.
@@ -91,12 +129,13 @@ Module Problem.
 End Problem.
 
 Section Nested.
-  CoInductive itree A := C n : A -> vseq (itree A) n -> itree A.
+
+  CoInductive itree A := C : A -> fseq (itree A) -> itree A.
 
   CoFixpoint example (n : nat) : itree nat :=
-    C n ((cofix build_branches m : vseq (itree nat) m :=
-            match m with
-            | 0 => Nil _
-            | t.+1 => Cns (example m) (build_branches t)
-            end) n).
+    C n (fseqB ((cofix build_branches m : vseq (itree nat) m :=
+                   match m with
+                   | 0 => Nil _
+                   | t.+1 => Cns (example m) (build_branches t)
+                   end) n)).
 End Nested.
