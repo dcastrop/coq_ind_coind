@@ -43,7 +43,7 @@ Recursive definition is:
 
 ## A Solution
 
-Possible solutions include using a non-inductive type instead of `seq`. This trick uses "finite coinductive types":
+This trick uses "finite coinductive types", instead of nesting an inductive type. These "finite coinductive types" should be isomorphic to an inductive type.
 
 ```coq
   CoInductive vseq : nat -> Type :=
@@ -62,7 +62,9 @@ Possible solutions include using a non-inductive type instead of `seq`. This tri
                         end) n)).
 ```
 
-Note that `cofix build_branches ...` must terminate: every corecursive call must be guarded. But by the type index, this means that `m` must be on a smaller natural number. IWould it be interesting to prove that any correcursive function producing `vseq A m` must terminate? There is already a proof that `seq A` and `fseq A` are isomorphic:
+### `fseq` is isomorphic to a list
+
+There is a proof that `seq A` and `fseq A` are isomorphic:
 
 ```coq
   Definition seq_to_fseq (l : seq) : fseq := ...
@@ -71,3 +73,21 @@ Note that `cofix build_branches ...` must terminate: every corecursive call must
   Lemma f_iso1 l : fseq_to_seq (seq_to_fseq l) = l.
   Lemma f_iso2 l : seq_to_fseq (fseq_to_seq l) = l.
 ```
+
+**Constructors**: 
+```coq
+  Definition f_nil : fseq := existT _ _ Nil.
+  Definition f_cons h t := existT _ _ (Cns h (projT2 t)).
+```
+**Induction principle**:
+```coq
+fseq_ind : forall (A : Type) (P : fseq A -> Type),
+    P (f_nil A) ->
+    (forall (h : A) (t : fseq A), P t -> P (f_cons h t)) ->
+    forall l : fseq A, P l
+```
+
+
+### Is any correcursive function producing `vseq A m` terminating?
+
+Informally, any CoFixpoint producing `vseq A m` must terminate after exactly `m` steps because every corecursive call must be guarded. Since the type index gets smaller after every correcursive call, the only constructor that we could produce after `m` steps is `Nil`. 
