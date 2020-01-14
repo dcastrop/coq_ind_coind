@@ -89,4 +89,4 @@ There is a proof that `seq A` and `fseq A` are isomorphic:
 
 **Any correcursive function producing must be `vseq A m` terminating**
 
-The fact that `fseq` is ismorphic to `seq` already proves this. If we have `f : A -> fseq B`, then for all `x : A`, `fseq_to_seq (f x) : seq B`, which must be finite. The idea is that `x : vseq A m` has exactly `m + 1` constructors. Every `cofix` must be guarded, so the correcursive calls must produce _less_ constructors, until the only option is to build `x : vseq A 0`, which must be equal to `Nil`.
+The fact that `fseq` is isomorphic to `seq` already proves this. If we have `f : A -> fseq B`, then for all `x : A`, `fseq_to_seq (f x) : seq B`, which must be finite. The idea is that `x : vseq A m` has exactly `m + 1` constructors. Every `cofix` must be guarded, so the correcursive calls must produce _less_ constructors, until the only option is to build `x : vseq A 0`, which must be equal to `Nil`.
