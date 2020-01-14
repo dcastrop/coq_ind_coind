@@ -14,7 +14,7 @@ Module Problem.
     C n ((fix build_branches m : seq (itree nat) :=
             match m with
             | 0 => [::]
-            | t.+1 => example t :: build_branches t
+            | t.+1 => example m :: build_branches t
             end) n).
 End Problem.
 ```
@@ -29,7 +29,7 @@ n : nat
 Sub-expression "(fix build_branches (m : nat) : seq (itree nat) :=
                    match m with
                    | 0 => [::]
-                   | t.+1 => example t :: build_branches t
+                   | t.+1 => example m :: build_branches t
                    end) n" not in guarded form (should be a constructor, an abstraction, a match, a cofix or a recursive
 call).
 Recursive definition is:
@@ -37,7 +37,7 @@ Recursive definition is:
  C n
    ((fix build_branches (m : nat) : seq (itree nat) := match m with
                                                        | 0 => [::]
-                                                       | t.+1 => example t :: build_branches t
+                                                       | t.+1 => example m :: build_branches t
                                                        end) n)".
 ```
 
@@ -50,21 +50,21 @@ Possible solutions include using a non-inductive type instead of `seq`. This tri
   | Nil   : vseq 0
   | Cns n : A -> vseq n -> vseq n.+1.
   
-  CoInductive itree A := C n : A -> vseq (itree A) n -> itree A.
-
+  Definition fseq := {n & vseq n}.
+  
+  CoInductive itree A := C : A -> fseq (itree A) -> itree A.
+  
   CoFixpoint example (n : nat) : itree nat :=
-    C n ((cofix build_branches m : vseq (itree nat) m :=
-            match m with
-            | 0 => Nil _
-            | t.+1 => Cns (example t) (build_branches t)
-            end) n).
+    C n (existT _ _ ((cofix build_branches m : vseq (itree nat) m :=
+                        match m with
+                        | 0 => Nil _
+                        | t.+1 => Cns (example m) (build_branches t)
+                        end) n)).
 ```
 
-I think that `cofix build_branches ...` must terminate: every corecursive call must be guarded. But by the type index, this means that it must be on a smaller natural number. There is a proof that `x : seq A` and `vseq A` are isomorphic:
+Note that `cofix build_branches ...` must terminate: every corecursive call must be guarded. But by the type index, this means that `m` must be on a smaller natural number. IWould it be interesting to prove that any correcursive function producing `vseq A m` must terminate? There is already a proof that `seq A` and `fseq A` are isomorphic:
 
 ```coq
-  Lemma iso1 l : vseq_to_seq (seq_to_vseq l) = l.
-
-  Lemma iso2 n (v : vseq n) :
-    cast_vseq (vseq_size v) (seq_to_vseq (vseq_to_seq v)) = v.
+  Lemma f_iso1 l : fseq_to_seq (seq_to_fseq l) = l.
+  Lemma f_iso2 l : seq_to_fseq (fseq_to_seq l) = l.
 ```
