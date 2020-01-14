@@ -62,18 +62,6 @@ This trick uses "finite coinductive types", instead of nesting an inductive type
                         end) n)).
 ```
 
-### `fseq` is isomorphic to a list
-
-There is a proof that `seq A` and `fseq A` are isomorphic:
-
-```coq
-  Definition seq_to_fseq (l : seq) : fseq := ...
-  Definition fseq_to_seq (l : fseq) : seq := ...
-  
-  Lemma f_iso1 l : fseq_to_seq (seq_to_fseq l) = l.
-  Lemma f_iso2 l : seq_to_fseq (fseq_to_seq l) = l.
-```
-
 **Constructors**: 
 ```coq
   Definition f_nil : fseq := existT _ _ Nil.
@@ -87,9 +75,18 @@ fseq_ind : forall (A : Type) (P : fseq A -> Type),
     forall l : fseq A, P l
 ```
 
+### `fseq` is isomorphic to a list
 
-### Is any correcursive function producing `vseq A m` terminating?
+There is a proof that `seq A` and `fseq A` are isomorphic:
 
-Informally, any CoFixpoint producing `vseq A m` must terminate after exactly `m` steps because every corecursive call must be guarded. Since the type index gets smaller after every correcursive call, the only constructor that we could produce after `m` steps is `Nil`. 
+```coq
+  Definition seq_to_fseq (l : seq) : fseq := ...
+  Definition fseq_to_seq (l : fseq) : seq := ...
+  
+  Lemma f_iso1 l : fseq_to_seq (seq_to_fseq l) = l.
+  Lemma f_iso2 l : seq_to_fseq (fseq_to_seq l) = l.
+```
 
-The fact that `fseq` is ismorphic to `seq` already proves this? If we have `f : A -> fseq B`, then for all `x : A`, `fseq_to_seq (f x) : seq B`, which must be finite.
+**Any correcursive function producing must be `vseq A m` terminating**
+
+The fact that `fseq` is ismorphic to `seq` already proves this. If we have `f : A -> fseq B`, then for all `x : A`, `fseq_to_seq (f x) : seq B`, which must be finite. The idea is that `x : vseq A m` has exactly `m + 1` constructors. Every `cofix` must be guarded, so the correcursive calls must produce _less_ constructors, until the only option is to build `x : vseq A 0`, which must be equal to `Nil`.
