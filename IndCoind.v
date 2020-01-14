@@ -86,7 +86,7 @@ Module Problem.
     C n ((fix build_branches m : seq (itree nat) :=
             match m with
             | 0 => [::]
-            | t.+1 => example t :: build_branches t
+            | t.+1 => example m :: build_branches t
             end) n).
 End Problem.
 
@@ -97,6 +97,6 @@ Section Nested.
     C n ((cofix build_branches m : vseq (itree nat) m :=
             match m with
             | 0 => Nil _
-            | t.+1 => Cns (example t) (build_branches t)
+            | t.+1 => Cns (example m) (build_branches t)
             end) n).
 End Nested.
