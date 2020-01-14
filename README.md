@@ -65,6 +65,9 @@ Possible solutions include using a non-inductive type instead of `seq`. This tri
 Note that `cofix build_branches ...` must terminate: every corecursive call must be guarded. But by the type index, this means that `m` must be on a smaller natural number. IWould it be interesting to prove that any correcursive function producing `vseq A m` must terminate? There is already a proof that `seq A` and `fseq A` are isomorphic:
 
 ```coq
+  Definition seq_to_fseq A (l : seq A) : fseq A := ...
+  Definition fseq_to_seq A (l : fseq A) : seq A := ...
+  
   Lemma f_iso1 l : fseq_to_seq (seq_to_fseq l) = l.
   Lemma f_iso2 l : seq_to_fseq (fseq_to_seq l) = l.
 ```
