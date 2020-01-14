@@ -69,16 +69,26 @@ Section CSeq.
     by rewrite (nat_irrelevance p erefl) (nat_irrelevance p1 erefl)/=.
   Qed.
 
-  Lemma iso2 n (v : vseq n) (p : size (vseq_to_seq v) = n) :
-    cast_vseq p (seq_to_vseq (vseq_to_seq v)) = v.
+  Lemma iso2 n (v : vseq n) :
+    cast_vseq (vseq_size v) (seq_to_vseq (vseq_to_seq v)) = v.
   Proof.
-    elim: n v p =>[|n Ih] v.
+    elim: n v =>[|n Ih] v.
     - by case Eq: _ / v=>//= p; rewrite (nat_irrelevance p erefl).
-    - case Eq: _ / v =>[//|m h t]; move: Eq t=>[<-]t {m} /= p.
-      by rewrite cast_cons Ih.
+    - case Eq: _ / v =>[//|m h t]; move: Eq t=>[<-]t {m} /=.
+      by rewrite cast_cons (nat_irrelevance (succ_inj _) (vseq_size t)) Ih.
   Qed.
-
 End CSeq.
+
+Module Problem.
+  CoInductive itree A := C : A -> seq (itree A) -> itree A.
+
+  Fail CoFixpoint example (n : nat) : itree nat :=
+    C n ((fix build_branches m : seq (itree nat) :=
+            match m with
+            | 0 => [::]
+            | t.+1 => example t :: build_branches t
+            end) n).
+End Problem.
 
 Section Nested.
   CoInductive itree A := C n : A -> vseq (itree A) n -> itree A.
