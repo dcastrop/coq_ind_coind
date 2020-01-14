@@ -91,3 +91,5 @@ fseq_ind : forall (A : Type) (P : fseq A -> Type),
 ### Is any correcursive function producing `vseq A m` terminating?
 
 Informally, any CoFixpoint producing `vseq A m` must terminate after exactly `m` steps because every corecursive call must be guarded. Since the type index gets smaller after every correcursive call, the only constructor that we could produce after `m` steps is `Nil`. 
+
+The fact that `fseq` is ismorphic to `seq` already proves this? If we have `f : A -> fseq B`, then for all `x : A`, `fseq_to_seq (f x) : seq B`, which must be finite.
