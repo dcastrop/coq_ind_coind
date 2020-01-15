@@ -25,26 +25,31 @@ Section CSeq.
   | Nil   : vseq 0
   | Cns n : A -> vseq n -> vseq n.+1.
 
-  Definition cast_vseq n m (p : n = m) : vseq n -> vseq m :=
-    match p in _ = m return vseq n -> vseq m with
-    | erefl => id
-    end.
-
-  Lemma succ_inj n m : n.+1 = m.+1 -> n = m.
-  Proof. by move=>[]. Defined.
-
   Fixpoint vseq_to_seq n (x : vseq n) {struct n} : seq A :=
-    match x in vseq m return m = n -> seq A with
+    match x
+          in vseq m
+          return m = n -> seq A
+    with
     | Nil =>
-      fun _ => [::]
+      fun _ =>
+        [::]
     | Cns m h t =>
-      match n return m.+1 = n -> seq A with
+      match n
+            return m.+1 = n -> seq A
+      with
       | 0 =>
         fun pf =>
           match pf with end
       | n.+1 =>
         fun pf =>
-          h :: vseq_to_seq (cast_vseq (succ_inj pf) t)
+          match esym (succn_inj pf)
+                in _ = n
+                return vseq n -> seq A
+          with
+          | erefl =>
+            fun t =>
+              h :: vseq_to_seq t
+          end t
       end
     end erefl.
 
@@ -59,6 +64,7 @@ Section CSeq.
     | erefl => seq_to_vseq l
     end.
 
+  (*
   Lemma cast_nil n (p : n = n) (v : vseq n) : cast_vseq p v = v.
   Proof.
     move: (@nat_irrelevance n n p erefl) => irr.
@@ -90,6 +96,7 @@ Section CSeq.
     - case Eq: _ / v =>[//|m h t]; move: Eq t=>[<-]t {m} /=.
       by rewrite cast_cons (nat_irrelevance (succ_inj _) (vseq_size t)) Ih.
   Qed.
+  *)
 
   Definition fseq := {n & vseq n}.
   Definition f_nil : fseq := existT _ _ Nil.
@@ -103,10 +110,10 @@ Section CSeq.
     forall l, P l.
   Proof.
     move=>P_nil P_cons [n v].
-    elim: n => [|n Ih] in v *=>//=.
-    - by case E: _/v.
-    - case E:_ /v=>[//|m h t]; move: E Ih t=>[->]{n} Ih t.
-      by move: (P_cons h (existT _ _ t))=>/(_ (Ih t)).
+    elim: n => [|n Ih] in v *; first by case E: _/v.
+    case E:_ /v=>[//|m h t]; move: E Ih =>[->] Ih {n}.
+    rewrite -/(h :: existT _ _ _).
+    by apply: P_cons; apply: Ih.
   Qed.
 
   Definition fseq_to_seq v := vseq_to_seq (projT2 v).
