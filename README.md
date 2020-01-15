@@ -49,20 +49,23 @@ This trick uses "finite coinductive types", instead of nesting an inductive type
   CoInductive vseq : nat -> Type :=
   | Nil   : vseq 0
   | Cns n : A -> vseq n -> vseq n.+1.
-  
+
   Definition fseq := {n & vseq n}.
-  
+
   CoInductive itree A := C : A -> fseq (itree A) -> itree A.
-  
+
+  Definition build (f : nat -> itree nat) : forall m, vseq (itree nat) m :=
+    cofix bb m :=
+      match m with
+      | 0 => Nil _
+      | t.+1 => Cns (f m) (bb t)
+      end.
+
   CoFixpoint example (n : nat) : itree nat :=
-    C n (existT _ _ ((cofix build_branches m : vseq (itree nat) m :=
-                        match m with
-                        | 0 => Nil _
-                        | t.+1 => Cns (example m) (build_branches t)
-                        end) n)).
+    C n (fseqB (build example n)).
 ```
 
-**Constructors**: 
+**Constructors**:
 ```coq
   Definition f_nil : fseq := existT _ _ Nil.
   Definition f_cons h t := existT _ _ (Cns h (projT2 t)).
@@ -82,7 +85,7 @@ There is a proof that `seq A` and `fseq A` are isomorphic:
 ```coq
   Definition seq_to_fseq (l : seq) : fseq := ...
   Definition fseq_to_seq (l : fseq) : seq := ...
-  
+
   Lemma f_iso1 l : fseq_to_seq (seq_to_fseq l) = l.
   Lemma f_iso2 l : seq_to_fseq (fseq_to_seq l) = l.
 ```

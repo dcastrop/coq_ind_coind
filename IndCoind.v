@@ -85,13 +85,16 @@ End CSeq.
 Notation "'fseqB' v" := (existT _ _ v) (at level 0).
 
 Section Nested.
-
   CoInductive itree A := C : A -> fseq (itree A) -> itree A.
 
+  Definition build (f : nat -> itree nat) : forall m, vseq (itree nat) m :=
+    cofix bb m :=
+      match m with
+      | 0 => Nil _
+      | t.+1 => Cns (f m) (bb t)
+      end.
+
   CoFixpoint example (n : nat) : itree nat :=
-    C n (fseqB ((cofix build_branches m : vseq (itree nat) m :=
-                   match m with
-                   | 0 => Nil _
-                   | t.+1 => Cns (example m) (build_branches t)
-                   end) n)).
+    C n (fseqB (build example n)).
+
 End Nested.
