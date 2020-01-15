@@ -61,11 +61,6 @@ Section CSeq.
       Cns h (seq_to_vseq t)
     end.
 
-  Definition aseq_to_vseq n (l : seq A) (p : size l = n) : vseq n :=
-    match p with
-    | erefl => seq_to_vseq l
-    end.
-
   Definition fseq := {n & vseq n}.
   Definition f_nil : fseq := existT _ _ Nil.
   Definition f_cons h t := existT _ _ (Cns h (projT2 t)).
