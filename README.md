@@ -1,6 +1,6 @@
 # Nested Induction/Coinduction in Coq
 
-This repository contains a way to trick Coq into having some kind of nested induction/coinduction, by nesting "finite coinductive types" that are isomorphic to an inductive type.
+This repository contains a way to trick the syntactic guardedness check of Coq, for having some kind of nested induction/coinduction by using "finite coinductive types". These finite coinductive types should be isomorphic to an inductive type. Finiteness is guaranteed by using an inductive type index for the coinductive type.
 
 ## The problem
 
