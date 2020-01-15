@@ -96,7 +96,6 @@ Section CSeq.
     rewrite  -[existT _ _ _]/(h :: existT _ _ _).
     by rewrite -/(fseq_to_seq _) -/(seq_to_fseq _) Ih.
   Qed.
-
 End CSeq.
 
 Notation "'fseqB' v" := (existT _ _ v) (at level 0).
