@@ -204,5 +204,21 @@ Section CTree.
     rewrite -!/(tree_to_ftree _) -!/(vtree_to_tree _) -!/(ftree_to_tree _).
     by rewrite Ihl Ihr.
   Qed.
-
 End CTree.
+
+Section ExampleTree.
+  CoInductive ttree := TC : nat -> ftree ttree -> ttree.
+
+  Definition tbuild (f : nat -> ttree) : forall m, vtree ttree m :=
+    cofix bb m :=
+      match m with
+      | 0 => CL _
+      | t.+1 =>
+        match maxnn t with
+        | erefl => CN (f m) (bb t) (bb t)
+        end
+      end.
+
+  CoFixpoint texample (n : nat) : ttree :=
+    TC n (fseqB (tbuild texample n)).
+End ExampleTree.
