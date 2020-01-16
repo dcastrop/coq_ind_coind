@@ -15,6 +15,8 @@ Module Problem.
             end) n).
 End Problem.
 
+(* exists size *)
+Notation "'eS'" := (existT _ _).
 (**
  Finite Coinductive Sequences
 *)
@@ -46,10 +48,30 @@ Section CSeq.
     end.
 
   Definition fseq := {n & vseq n}.
-  Definition f_nil : fseq := existT _ _ Nil.
-  Definition f_cons h t := existT _ _ (Cns h (projT2 t)).
+  Definition f_nil : fseq := eS Nil.
+  Definition f_cons h t := eS (Cns h (projT2 t)).
   Notation "[::]" := f_nil.
   Notation "h :: t" := (f_cons h t).
+
+  Definition f_head (t : fseq) :=
+    match t with
+    | existT _ v =>
+      match v with
+      | Nil => None
+      | Cns _ h _ => Some h
+      end
+    end.
+
+  Definition f_tail (t : fseq) :=
+    match t with
+    | existT _ v =>
+      match v with
+      | Nil => None
+      | Cns _ _ t => Some (existT _ _ t)
+      end
+    end.
+
+  Definition f_size (t : fseq) := projT1 t.
 
   Lemma fseq_ind (P : fseq -> Type) :
     P [::] ->
@@ -82,8 +104,6 @@ Section CSeq.
   Qed.
 End CSeq.
 
-Notation "'fseqB'" := (existT _ _).
-
 Section Nested.
   CoInductive itree A := C : A -> fseq (itree A) -> itree A.
 
@@ -95,7 +115,7 @@ Section Nested.
       end.
 
   CoFixpoint example (n : nat) : itree nat :=
-    C n (fseqB (build example n)).
+    C n (eS (build example n)).
 
 End Nested.
 
@@ -220,5 +240,5 @@ Section ExampleTree.
       end.
 
   CoFixpoint texample (n : nat) : ttree :=
-    TC n (fseqB (tbuild texample n)).
+    TC n (eS (tbuild texample n)).
 End ExampleTree.
