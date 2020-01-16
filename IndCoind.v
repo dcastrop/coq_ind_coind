@@ -153,7 +153,7 @@ Section Nested.
 End Nested.
 
 (**
- Finite Coinductive Trees
+ Finite Coinductive Trees (indexed by shape)
 *)
 Module CTree.
   Section CTree.
