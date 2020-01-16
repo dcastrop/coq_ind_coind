@@ -66,14 +66,14 @@ Section CSeq.
   Definition fseq_to_seq v := vseq_to_seq (projT2 v).
   Definition seq_to_fseq v := existT _ _ (seq_to_vseq v).
 
-  Lemma f_iso1 l : fseq_to_seq (seq_to_fseq l) = l.
+  Lemma fseq_iso1 l : fseq_to_seq (seq_to_fseq l) = l.
   Proof.
     rewrite /fseq_to_seq/seq_to_fseq/=.
     elim: l=>//= h t Ih.
     by rewrite (nat_irrelevance (esym _) erefl) Ih.
   Qed.
 
-  Lemma f_iso2 l : seq_to_fseq (fseq_to_seq l) = l.
+  Lemma fseq_iso2 l : seq_to_fseq (fseq_to_seq l) = l.
   Proof.
     elim/fseq_ind: l=>//= h t Ih.
     rewrite /seq_to_fseq/fseq_to_seq/= (nat_irrelevance (esym _) erefl)/=.
@@ -82,7 +82,7 @@ Section CSeq.
   Qed.
 End CSeq.
 
-Notation "'fseqB' v" := (existT _ _ v) (at level 0).
+Notation "'fseqB'" := (existT _ _).
 
 Section Nested.
   CoInductive itree A := C : A -> fseq (itree A) -> itree A.
@@ -98,3 +98,111 @@ Section Nested.
     C n (fseqB (build example n)).
 
 End Nested.
+
+
+(**
+ Finite Coinductive Trees
+*)
+Section CTree.
+  Context (A : Type).
+
+  CoInductive vtree : nat -> Type :=
+  | CL : vtree 0
+  | CN l r : A -> vtree l -> vtree r -> vtree (maxn l r).+1.
+
+  Inductive tree : Type :=
+  | L : tree
+  | N : A -> tree -> tree -> tree.
+
+  Fixpoint depth (t : tree) :=
+    match t with
+    | L => 0
+    | N _ l r => (maxn (depth l) (depth r)).+1
+    end.
+
+  Lemma maxn_left l r n : maxn l r <= n -> l <= n.
+  Proof. by rewrite geq_max=>/andP-[]. Qed.
+
+  Lemma maxn_right l r n : maxn l r <= n -> r <= n.
+  Proof. by rewrite geq_max=>/andP-[]. Qed.
+
+  Lemma z_ge_succn B n (p : 0 >= n.+1) : B.
+  Proof. by []. Qed.
+
+  Fixpoint vtree_to_dtree n m (x : vtree n) {struct m} : n <= m -> tree :=
+    match x in vtree n return n <= m -> tree with
+    | CL => fun _ => L
+    | CN dl dr v l r =>
+      match m with
+      | 0 => fun pf => z_ge_succn _ pf
+      | m.+1 =>
+        fun pf =>
+          N v
+            (vtree_to_dtree l (maxn_left pf))
+            (vtree_to_dtree r (maxn_right pf))
+      end
+    end.
+
+  Definition vtree_to_tree n (x : vtree n) : tree := vtree_to_dtree x (leqnn n).
+
+  Fixpoint tree_to_vtree (t : tree) : vtree (depth t) :=
+    match t return vtree (depth t) with
+    | L => CL
+    | N h l r => CN h (tree_to_vtree l) (tree_to_vtree r)
+    end.
+
+  Definition ftree := {n & vtree n}.
+  Definition f_leaf : ftree := existT _ _ CL.
+  Definition f_node h l r := existT _ _ (CN h (projT2 l) (projT2 r)).
+
+  Lemma ftree_ind (P : ftree -> Type) :
+    P f_leaf ->
+    (forall h l r, P l -> P r -> P (f_node h l r)) ->
+    forall t, P t.
+  Proof.
+    move=>P_leaf P_node [n v]; move: {-2}n (leqnn n) v => m.
+    elim: n => [|n Ih] in m *; first by case: m=>// _; case E:_/.
+    move=> m_le_Sn v; case:_/v m_le_Sn =>[|dl dr h l r]// m_le_Sn{m}.
+    move: (Ih _ (maxn_left m_le_Sn) l) (Ih _ (maxn_right m_le_Sn) r).
+    by apply: P_node.
+  Qed.
+
+  Definition ftree_to_tree v := vtree_to_tree (projT2 v).
+  Definition tree_to_ftree v := existT _ _ (tree_to_vtree v).
+
+  Lemma vtree_gt n (t : vtree n) l m :
+    (forall m (p : n <= m), vtree_to_dtree t p = l) ->
+    (forall (p : n <= m), vtree_to_dtree t p = l).
+  Proof. by []. Qed.
+
+  Lemma ftree_iso1 l : ftree_to_tree (tree_to_ftree l) = l.
+  Proof.
+    rewrite /ftree_to_tree/tree_to_ftree/vtree_to_tree/=.
+    move: (leqnn (depth l)); apply: vtree_gt.
+    elim: l; first by case.
+    by move=>h l Ihl r Ihr/=; case=>//=m p; rewrite Ihl Ihr.
+  Qed.
+
+  Lemma fold_dtree n (l : vtree n) m1 (p : n <= m1) m2 (q : n <= m2) :
+    vtree_to_dtree l p = vtree_to_dtree l q.
+  Proof.
+    elim: m1 n l p m2 q =>[|n Ih].
+    - by move=> n; case E:_/ =>// p [].
+    - move=> n'; case:_/ =>[|dl dr h l r]; first by move=> _ []/=.
+      move=> p [//|m q]/=.
+      by rewrite (Ih _ l (maxn_left p) _ (maxn_left q))
+                 (Ih _ r (maxn_right p) _ (maxn_right q)).
+  Qed.
+
+  Lemma ftree_iso2 l : tree_to_ftree (ftree_to_tree l) = l.
+  Proof.
+    elim/ftree_ind: l=>//= h l r Ihl Ihr.
+    rewrite /ftree_to_tree/tree_to_ftree/=.
+    rewrite -[existT _ _ _]/(f_node h (existT _ _ _) (existT _ _ _)).
+    rewrite (fold_dtree _ (maxn_left _) (leqnn _)).
+    rewrite (fold_dtree _ (maxn_right _) (leqnn _)).
+    rewrite -!/(tree_to_ftree _) -!/(vtree_to_tree _) -!/(ftree_to_tree _).
+    by rewrite Ihl Ihr.
+  Qed.
+
+End CTree.
