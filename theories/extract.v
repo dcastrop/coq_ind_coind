@@ -46,7 +46,7 @@ Extraction Inline cseq.v_foldl.
 Extraction Inline cseq.t_foldl.
 
 (* Unset Extraction SafeImplicits. *)
-Extraction "../extraction/cseq"
+Extraction "extraction/cseq"
            cseq.vseq_to_seq
            cseq.fseq_to_seq
            cseq.seq_to_vseq
@@ -69,7 +69,7 @@ Extraction Implicit stree.vtree_to_tree  [ n ].
 
 Extraction Inline stree.vtree_to_tree'.
 
-Extraction "../extraction/stree"
+Extraction "extraction/stree"
            fcoind.stree.shape
            fcoind.stree.tree
            fcoind.stree.vtree
@@ -92,7 +92,7 @@ Extraction Implicit ctree.vtree_to_tree  [ n ].
 
 Extraction Inline ctree.vtree_to_tree'.
 
-Extraction "../extraction/ctree"
+Extraction "extraction/ctree"
            fcoind.ctree.tree
            fcoind.ctree.vtree
            fcoind.ctree.vtree_to_tree
