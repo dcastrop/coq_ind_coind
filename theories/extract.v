@@ -3,7 +3,7 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Import Prenex Implicits.
 
-Require Import Extraction.
+From Coq Require Extraction.
 
 Extract Inductive nat => int [ "0" "succ" ] "(fun fO fS n -> if n=0 then fO () else fS (n-1))".
 Extract Inductive bool => bool [ "true" "false" ].
@@ -49,12 +49,25 @@ Extraction "extraction/cseq"
            cseq.t_reverse
            cseq.t_filter.
 
-(* (** Extract Tree *)
-(*  *) *)
-(* Extraction Implicit CTree.CN [ l r ]. *)
-(* Extraction Implicit CTree.vtree_to_tree' [ n ]. *)
-(* Extraction Implicit CTree.vtree_to_tree  [ n ]. *)
+(** Extract Tree *)
+(*  *)
 
-(* Extraction Inline CTree.vtree_to_tree'. *)
+Require fcoind.ctree.
+Extraction Implicit ctree.CN [ l r ].
+Extraction Implicit ctree.vtree_to_tree' [ n ].
+Extraction Implicit ctree.vtree_to_tree  [ n ].
 
-(* Extraction CTree. *)
+Extraction Inline ctree.vtree_to_tree'.
+
+Extraction "extraction/ctree"
+           fcoind.ctree.shape
+           fcoind.ctree.tree
+           fcoind.ctree.vtree
+           fcoind.ctree.vtree_to_tree
+           fcoind.ctree.tshape
+           fcoind.ctree.tree_to_vtree
+           fcoind.ctree.ftree
+           fcoind.ctree.f_leaf
+           fcoind.ctree.f_node
+           fcoind.ctree.ftree_to_tree
+           fcoind.ctree.tree_to_ftree.

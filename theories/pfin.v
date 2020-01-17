@@ -1,4 +1,4 @@
-From mathcomp.ssreflect Require Import all_ssreflect seq.
+From mathcomp.ssreflect Require Import ssreflect ssrnat.
 Set Implicit Arguments.
 Unset Strict Implicit.
 Import Prenex Implicits.

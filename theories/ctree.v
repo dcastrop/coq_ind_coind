@@ -1,5 +1,4 @@
-From mathcomp.ssreflect Require Import all_ssreflect seq.
-From mathcomp Require Import finmap.
+From mathcomp.ssreflect Require Import ssreflect ssrfun.
 Set Implicit Arguments.
 Unset Strict Implicit.
 Import Prenex Implicits.
