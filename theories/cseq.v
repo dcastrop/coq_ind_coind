@@ -14,6 +14,16 @@ Notation "'eS'" := (existT _ _).
 Section CSeq.
   Context (A : Type).
 
+  (* Cannot define fseq using an inductive predicate on a coinductive vseq.
+   * E.g.
+   * CoInductive vseq A := ...
+   * Definition fseq A := {x : vseq A & finite x}
+   * CoInductive ntree := C : nat -> fseq ntree -> ntree.
+   *
+   * ntree will *not* be in a s
+   * The reason is that then, nesting some Coinductive definition will not
+   * be a strictly positive occurrence!
+   *)
   CoInductive vseq : nat -> Type :=
   | Nil   : vseq 0
   | Cns n : A -> vseq n -> vseq n.+1.

@@ -3,9 +3,10 @@
 -arg all
 theories/pfin.v
 theories/cseq.v
+theories/stree.v
 theories/ctree.v
 theories/examples/cseq.v
 theories/examples/problem.v
-theories/examples/ctree.v
+theories/examples/sctree.v
 
 theories/extract.v
