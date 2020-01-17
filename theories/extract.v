@@ -45,11 +45,17 @@ Extraction Inline cseq.v_foldl'.
 Extraction Inline cseq.v_foldl.
 Extraction Inline cseq.t_foldl.
 
+Extraction Implicit cseq.Fseq [ n ].
+Extract Inductive cseq.fseq => vseq [ "" ].
+Extract Constant cseq.getVseq => "".
+Extraction Inline cseq.getVseq.
+Extraction Inline cseq.getVsize.
+Extraction Inline cseq.vseq_to_seq.
+Extraction Inline cseq.seq_to_vseq.
+
 (* Unset Extraction SafeImplicits. *)
 Extraction "extraction/cseq"
-           cseq.vseq_to_seq
            cseq.fseq_to_seq
-           cseq.seq_to_vseq
            cseq.seq_to_fseq
            cseq.f_nil
            cseq.f_cons

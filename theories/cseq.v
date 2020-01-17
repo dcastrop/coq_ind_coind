@@ -6,11 +6,11 @@ Import Prenex Implicits.
 Require Import fcoind.pfin.
 (* exists size *)
 
-Notation "'eS'" := (existT _ _).
 (**
  Finite Coinductive Sequences
 *)
 
+Unset Elimination Schemes.
 Section CSeq.
   Context (A : Type).
 
@@ -42,37 +42,38 @@ Section CSeq.
     | h :: t => Cns h (seq_to_vseq t)
     end.
 
-  Definition fseq := {n & vseq n}.
-  Definition f_nil : fseq := eS Nil.
-  Definition f_cons h t := eS (Cns h (projT2 t)).
+  Inductive fseq := Fseq n : vseq n -> fseq. (* {n & vseq n}. *)
+
+  Definition getVsize f :=
+    match f with
+    | Fseq n _ => n
+    end.
+
+  Definition getVseq f : vseq (getVsize f) :=
+    match f with
+    | Fseq _ v => v
+    end.
+
+  Definition f_nil : fseq := Fseq Nil.
+
+  Definition f_cons h t := Fseq (Cns h (getVseq t)).
 
   Definition f_head (t : fseq) :=
-    match t with
-    | existT _ v =>
-      match v with
-      | Nil => None
-      | Cns _ h _ => Some h
-      end
+    match getVseq t with
+    | Nil => None
+    | Cns _ h _ => Some h
     end.
-
-  Lemma prednSm n m : n = S m -> predn n = m.
-  Proof. by case: n=>// n ->. Qed.
 
   Definition f_tail (t : fseq) :=
-    match t with
-    | existT n v =>
-      match v in vseq m return n = m -> option fseq with
-      | Nil => fun _ => None
-      | Cns _ _ t =>
-        fun pf =>
-          match prednSm pf in _ = n return vseq n -> option fseq with
-          | erefl => fun t => Some (existT _ (predn n) t)
-          end t
-      end erefl
+    match getVseq t with
+    | Nil => None
+    | Cns _ _ t => Some (Fseq t)
     end.
 
-  Definition f_size (t : fseq) := projT1 t.
+  Definition fseq_to_seq v := vseq_to_seq (getVseq v).
+  Definition seq_to_fseq v := Fseq (seq_to_vseq v).
 
+  Definition f_size (t : fseq) := size (fseq_to_seq t).
 
   Definition v_foldl' B (z : B) (f : B -> A -> B)
     : forall n (x :vseq n), Fin n -> B :=
@@ -86,7 +87,7 @@ Section CSeq.
     v_foldl' z f x (all_fin n).
 
   Definition t_foldl B (z : B) (f : B -> A -> B) (x : fseq) : B :=
-    v_foldl z f (projT2 x).
+    v_foldl z f (getVseq x).
 
   Definition t_reverse : fseq -> fseq :=
     t_foldl f_nil (fun x y => f_cons y x).
@@ -103,12 +104,9 @@ Section CSeq.
     move=>P_nil P_cons [n v].
     elim: n => [|n Ih] in v *; first by case E: _/v.
     case E:_ /v=>[//|m h t]; move: E t =>[<-] t {m}.
-    rewrite -/(f_cons h (existT _ _ _)).
+    rewrite -/(f_cons h (Fseq _)).
       by apply: P_cons; apply: Ih.
   Qed.
-
-  Definition fseq_to_seq v := vseq_to_seq (projT2 v).
-  Definition seq_to_fseq v := existT _ _ (seq_to_vseq v).
 
   Lemma fseq_iso1 l : fseq_to_seq (seq_to_fseq l) = l.
   Proof.
@@ -139,7 +137,6 @@ Section CSeq.
   Lemma fseq_iso2 : forall l, seq_to_fseq (fseq_to_seq l) = l.
   Proof.
     elim/fseq_ind=>//= h t Ih; rewrite unroll_fseq /seq_to_fseq/=.
-    rewrite -![existT _ _ _]/(f_cons h (existT _ _ _)).
-    by rewrite -/(seq_to_fseq _) Ih.
+    by rewrite -!/(f_cons h (Fseq _)) -/(seq_to_fseq _) Ih.
   Qed.
 End CSeq.

@@ -12,5 +12,5 @@ Section Nested.
     cofix bb m := if m is t.+1 then Cns (f m) (bb t) else Nil _.
 
   CoFixpoint example (n : nat) : itree nat :=
-    C n (eS (build example n)).
+    C n (Fseq (build example n)).
 End Nested.
