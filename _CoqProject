@@ -1,0 +1,6 @@
+-R theories/ fcoind
+-arg -w
+-arg all
+theories/cseq.v
+theories/pfin.v
+theories/ctree.v
