@@ -2,4 +2,6 @@
 *.vo
 *.ml
 *.mli
-
+*.aux
+Makefile
+Makefile.conf
