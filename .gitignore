@@ -5,5 +5,5 @@
 Makefile
 Makefile.conf
 
-src/cseq.ml
-src/cseq.mli
+extraction/cseq.ml
+extraction/cseq.mli

@@ -36,7 +36,7 @@ Extraction Inline cseq.v_foldl.
 Extraction Inline cseq.t_foldl.
 
 (* Unset Extraction SafeImplicits. *)
-Extraction "src/cseq"
+Extraction "extraction/cseq"
            cseq.vseq_to_seq
            cseq.fseq_to_seq
            cseq.seq_to_vseq
