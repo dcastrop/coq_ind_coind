@@ -1,5 +1,4 @@
 From mathcomp.ssreflect Require Import all_ssreflect seq.
-From mathcomp Require Import finmap.
 Set Implicit Arguments.
 Unset Strict Implicit.
 Import Prenex Implicits.
@@ -23,7 +22,7 @@ Set Extraction Flag 2047.
 
 (** Extract CSeq
  *)
-Require cseq.
+Require fcoind.cseq.
 
 Extraction Implicit cseq.Cns [ n ].
 Extraction Implicit cseq.vseq_to_seq' [ n ].
@@ -37,7 +36,7 @@ Extraction Inline cseq.v_foldl.
 Extraction Inline cseq.t_foldl.
 
 (* Unset Extraction SafeImplicits. *)
-Extraction "cseq"
+Extraction "src/cseq"
            cseq.vseq_to_seq
            cseq.fseq_to_seq
            cseq.seq_to_vseq
@@ -50,12 +49,12 @@ Extraction "cseq"
            cseq.t_reverse
            cseq.t_filter.
 
-(** Extract Tree
- *)
-Extraction Implicit CTree.CN [ l r ].
-Extraction Implicit CTree.vtree_to_tree' [ n ].
-Extraction Implicit CTree.vtree_to_tree  [ n ].
+(* (** Extract Tree *)
+(*  *) *)
+(* Extraction Implicit CTree.CN [ l r ]. *)
+(* Extraction Implicit CTree.vtree_to_tree' [ n ]. *)
+(* Extraction Implicit CTree.vtree_to_tree  [ n ]. *)
 
-Extraction Inline CTree.vtree_to_tree'.
+(* Extraction Inline CTree.vtree_to_tree'. *)
 
-Extraction CTree.
+(* Extraction CTree. *)

@@ -1,7 +1,9 @@
 *.glob
 *.vo
-*.ml
-*.mli
 *.aux
+.coqdeps.d
 Makefile
 Makefile.conf
+
+src/cseq.ml
+src/cseq.mli

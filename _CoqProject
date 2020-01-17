@@ -1,9 +1,11 @@
 -R theories/ fcoind
 -arg -w
 -arg all
-theories/cseq.v
 theories/pfin.v
+theories/cseq.v
 theories/ctree.v
 theories/examples/cseq.v
 theories/examples/problem.v
 theories/examples/ctree.v
+
+theories/extract.v
