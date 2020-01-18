@@ -6,9 +6,9 @@ Import Prenex Implicits.
 From Coq Require Extraction.
 
 Extract Inductive nat => int [ "0" "succ" ] "(fun fO fS n -> if n=0 then fO () else fS (n-1))".
-Extract Constant predn => "(fun n -> n-1) ".
-Extract Constant leq => "( <= )".
-Extract Constant maxn => "max".
+Extract Inlined Constant predn => "(fun n -> n-1) ".
+Extract Inlined Constant leq => "( <= )".
+Extract Inlined Constant maxn => "max".
 Extraction Inline leq.
 Extraction Inline predn.
 Extraction Inline maxn.
@@ -47,7 +47,7 @@ Extraction Inline cseq.t_foldl.
 
 Extraction Implicit cseq.Fseq [ n ].
 Extract Inductive cseq.fseq => vseq [ "" ].
-Extract Constant cseq.getVseq => "".
+Extract Inlined Constant cseq.getVseq => "".
 Extraction Inline cseq.getVseq.
 Extraction Inline cseq.getVsize.
 Extraction Inline cseq.vseq_to_seq.
