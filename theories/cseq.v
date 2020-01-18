@@ -28,6 +28,7 @@ Section CSeq.
   | Nil   : vseq 0
   | Cns n : A -> vseq n -> vseq n.+1.
 
+  (* Fin n not needed. Used to avoid matching on "n" and erefl *)
   Fixpoint vseq_to_seq' n (x : vseq n) (p : Fin n) {struct p} : seq A :=
     match x in (vseq m) return (n = m -> seq A) with
     | Nil => fun _ => [::]
