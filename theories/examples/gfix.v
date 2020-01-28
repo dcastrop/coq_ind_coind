@@ -4,22 +4,32 @@ Unset Strict Implicit.
 Import Prenex Implicits.
 
 Section FixGen.
-  CoInductive GFix (S : Set) (P : Set -> Set) : Set :=
-  | GFix_fold : P S -> (S -> GFix S P) -> GFix S P.
 
-  Definition Gunfold
-             (S : Set)
-             (P : Set -> Set)
-             (map : forall (x : Set) (y : Set), (x -> y) -> P x -> P y)
-             (x : GFix S P) : P (GFix S P) :=
-    match x with
-    | GFix_fold p f => map _ (GFix S P) f p
+  CoInductive PCFix (S : Type) (P : Type -> Type) : Type :=
+  | GFix_fold (S' : Type) : P S' -> (S' -> S + PCFix S P) -> PCFix S P.
+
+  Definition monotone P := forall {x y : Type}, (x -> y) -> P x -> P y.
+
+  Definition GFix := PCFix False.
+
+  Definition unF A B (f : A -> False + B) (x : A) : B :=
+    match f x with
+    | inl f => False_rect B f
+    | inr x => x
     end.
 
-  Inductive treeP (A : Set) (t : Set) : Set :=
+  Definition genF A B (f : A -> B) (x : A) : False + B := inr (f x).
+
+  Definition gfix_unfold P (map : monotone P) (x : GFix P)
+    : P (GFix P)%type :=
+    match x with
+    | GFix_fold _ p f => map _ (GFix P)%type (unF f) p
+    end.
+
+  Inductive treeP (A : Type) (t : Type) : Type :=
   | CS : A -> list t -> treeP A t.
 
-  Definition citree A := GFix nat (treeP A).
+  Definition citree A := GFix (treeP A).
 
   Fixpoint downfrom n :=
     match n with
@@ -28,5 +38,6 @@ Section FixGen.
     end.
 
   CoFixpoint exn (n : nat) : citree nat :=
-    GFix_fold (CS n (downfrom n)) (fun m => exn m).
+    GFix_fold (CS n (downfrom n)) (genF (fun m => exn m)).
+
 End FixGen.
