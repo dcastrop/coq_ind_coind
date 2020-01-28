@@ -37,7 +37,10 @@ Section FixGen.
     | m.+1 => n :: downfrom m
     end.
 
-  CoFixpoint exn (n : nat) : citree nat :=
-    GFix_fold (CS n (downfrom n)) (genF (fun m => exn m)).
+  CoFixpoint ana A (P : Type -> Type) (f : A -> P A) (x : A) : GFix P :=
+    GFix_fold (f x) (genF (fun y => ana f y)).
 
+  Definition build n := CS n (downfrom n).
+
+  Definition exn (n : nat) : citree nat := ana build n.
 End FixGen.
