@@ -5,16 +5,16 @@ Unset Strict Implicit.
 Import Prenex Implicits.
 
 Section FixGen.
-  CoInductive GFix T (P : Type -> Type) : Type :=
-  | GFix_in : P T -> (T -> GFix T P) -> GFix T P.
+  CoInductive GFix T (P : Type -> Type) (occ : forall (X : Type), P X -> seq X) : Type :=
+  | GFix_in (p : P T) : (forall (t : T), List.In t (occ _ p) -> GFix T occ) -> GFix T occ.
 
-  Definition monotone P := forall X Y, (X -> Y) -> P X -> P Y.
+  Definition monotone P occ := forall X Y (p : P X), (forall (x : X), List.In x (occ _ p) -> Y) -> P Y.
 
   Definition enumerable P Y := forall X, P X -> P Y * seq (Y * X).
 
-  Definition gFix_out S P (map : monotone P) (x : GFix S P) : P (GFix S P) :=
+  Definition gFix_out S P (occ : forall (X : Type), P X -> seq X) (map : monotone occ)  (x : GFix S occ) : P (GFix S occ) :=
     match x with
-    | GFix_in p f => map _ _ f p
+    | GFix_in p f => map _ _ p f
     end.
 
   CoFixpoint ana A (P : Type -> Type) (f : A -> P A) (x : A) : GFix A P :=
