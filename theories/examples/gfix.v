@@ -115,8 +115,13 @@ Section FixGen.
   Definition fhylo A B P (R : Occ P) (eq : p_dec_eq A P) (map : monotone R)
            (g : P B -> B) (h : A -> P A)
     : forall (x : A) (F : Finite (ana R h x)), B
-    := fix f (x : A) (F : Finite (ana R h x)) {struct F} :=
+    := fix f x F {struct F} :=
          g (map _ _ (h x) (fun n Occ => f n (Finite_inv2 eq (h x) F Occ))).
+
+  (* Goal forall A B P (R : Occ P) (eq : p_dec_eq A P) (map : monotone R) *)
+  (*             (g : P B -> B) (h : A -> P A) (x : A) (F : Finite (ana R h x)), *)
+  (*     fhylo eq map g F = cata map g (fana eq F). *)
+
 End FixGen.
 
 Require Import List.
@@ -186,6 +191,16 @@ Section QSort.
     | Div h l r => l ++ h :: r
     end.
 
+  Lemma list_filter_length A (pred : A -> bool) (l : list A) :
+    length (filter pred l) <= length l.
+  Proof with eauto.
+    induction l...
+    simpl; case (pred a); simpl.
+    - apply le_n_S...
+    - apply le_S in IHl...
+  Qed.
+  Hint Resolve list_filter_length.
+
   Lemma p_split_terminates (l : list nat) : Finite (ana (@P_occ nat) p_split l).
   Proof.
     generalize (PeanoNat.Nat.leb_refl (length l)).
@@ -194,21 +209,11 @@ Section QSort.
     induction n; intros []; simpl; intro EQ; try (discriminate EQ); eauto;
       rewrite (gfix_unfold_id (ana _ _ _)); constructor; intros s F; destruct F.
     - subst; apply IHn; clear IHn.
-      apply PeanoNat.Nat.leb_le in EQ.
-      apply PeanoNat.Nat.leb_le.
-      generalize (fun (x : nat) => Nat.leb x n0); intros P; clear n0.
-      revert n EQ; induction l; auto; simpl; elim (P a); simpl; intros n LE.
-      + destruct n; try (apply Le.le_n_0_eq in LE; discriminate LE).
-        apply Le.le_n_S; apply Le.le_S_n in LE; auto.
-      + apply Le.le_Sn_le in LE; apply IHl; auto.
+      apply PeanoNat.Nat.leb_le in EQ; apply PeanoNat.Nat.leb_le.
+      apply (PeanoNat.Nat.le_trans _ (length l) n); eauto.
     - subst; apply IHn; clear IHn.
-      apply PeanoNat.Nat.leb_le in EQ.
-      apply PeanoNat.Nat.leb_le.
-      generalize (fun (x : nat) => negb (Nat.leb x n0)); intros P; clear n0.
-      revert n EQ; induction l; auto; simpl; elim (P a); simpl; intros n LE.
-      + destruct n; try (apply Le.le_n_0_eq in LE; discriminate LE).
-        apply Le.le_n_S; apply Le.le_S_n in LE; auto.
-      + apply Le.le_Sn_le in LE; apply IHl; auto.
+      apply PeanoNat.Nat.leb_le in EQ; apply PeanoNat.Nat.leb_le.
+      apply (PeanoNat.Nat.le_trans _ (length l) n); eauto.
   Qed.
 
   Definition spl (x : list nat) := fana deq (p_split_terminates x).
@@ -216,7 +221,8 @@ Section QSort.
   Definition msort (x : list nat) : list nat
     := fhylo deq (@pmap nat) p_merge (p_split_terminates x).
 End QSort.
-From Coq Require Extraction ExtrOcamlBasic ExtrOcamlIntConv ExtrOcamlNatInt.
+(* From Coq Require Extraction ExtrHaskellBasic ExtrHaskellNatInteger. *)
+From Coq Require Extraction ExtrOcamlBasic ExtrOcamlNatInt.
 Extraction Inline pmap.
 Extraction Inline ana.
 Extraction Inline fana.
@@ -224,5 +230,5 @@ Extraction Inline fcata.
 Extraction Inline fhylo.
 Extraction Inline p_merge.
 Extraction Inline p_split.
-Set Extraction Optimize.
-Recursive Extraction msort.
+Print Extraction Inline.
+Extraction "msort" msort.
