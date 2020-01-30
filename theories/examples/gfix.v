@@ -1,31 +1,42 @@
 From mathcomp.ssreflect Require Import all_ssreflect.
 
+Require Import Eqdep_dec.
+
 Set Implicit Arguments.
 Unset Strict Implicit.
 Import Prenex Implicits.
 
 Section FixGen.
-  CoInductive GFix T (P : Type -> Type) (occ : forall (X : Type), P X -> seq X) : Type :=
-  | GFix_in (p : P T) : (forall (t : T), List.In t (occ _ p) -> GFix T occ) -> GFix T occ.
 
-  Definition monotone P occ := forall X Y (p : P X), (forall (x : X), List.In x (occ _ p) -> Y) -> P Y.
+  Definition Occ (P : Type -> Type) := forall (X : Type), X -> P X -> Prop.
 
-  Definition enumerable P Y := forall X, P X -> P Y * seq (Y * X).
+  CoInductive GFix T (P : Type -> Type) (R : Occ P) : Type :=
+  | GFix_in (p : P T) : (forall (t : T), R T t p -> GFix T R) -> GFix T R.
+  Arguments GFix_in [T] [P] [R] p f.
 
-  Definition gFix_out S P (occ : forall (X : Type), P X -> seq X) (map : monotone occ)  (x : GFix S occ) : P (GFix S occ) :=
-    match x with
-    | GFix_in p f => map _ _ p f
-    end.
+  Definition monotone P (R : Occ P)
+    := forall (X Y : Type) p, (forall x, R X x p -> Y) -> P Y.
 
-  CoFixpoint ana A (P : Type -> Type) (f : A -> P A) (x : A) : GFix A P :=
-    GFix_in (f x) (ana f).
+  Definition fmap P R (rmap : monotone R) (X Y : Type)
+    : (X -> Y) -> P X -> P Y
+    := fun f x => rmap _ _ x (fun x _ => f x).
 
-  Definition gfix_unfold A P (x : GFix A P) : GFix A P :=
+  Definition gFix_out S P (R : Occ P) (map : monotone R)
+    : GFix S R -> P (GFix S R) :=
+    fun x => match x with
+             | GFix_in p f => map _ _ p f
+             end.
+
+  Definition ana A P (R : Occ P)
+    : (A -> P A) -> A -> GFix A R
+    := fun h => cofix f x := GFix_in (h x) (fun x _ => f x).
+
+  Definition gfix_unfold A P (R : Occ P) (x : GFix A R) : GFix A R :=
     match x with
     | GFix_in p f => GFix_in p f
     end.
 
-  Lemma gfix_unfold_id A P (x : GFix A P) : x = gfix_unfold x.
+  Lemma gfix_unfold_id A P (R : Occ P) (x : GFix A R) : x = gfix_unfold x.
   Proof. by case: x. Qed.
 
   (* An alternative is having a single constructor [LFix_in S : P S -> (S ->
@@ -35,100 +46,84 @@ Section FixGen.
   (* | LFix_in1 : P False -> LFix S P *)
   (* | LFix_in2 : P S -> (S -> LFix S P) -> LFix S P. *)
 
-  Inductive LFix (P : Type -> Type) : Type :=
-  (* | LFix_in1 : P False -> LFix S P *)
-  | LFix_in (S : Type) : P S -> (S -> LFix P) -> LFix P.
+  Inductive LFix T (P : Type -> Type) (R : Occ P) : Type :=
+  | LFix_in (p : P T) : (forall (t : T), R T t p -> LFix T R) -> LFix T R.
+  Arguments LFix_in [T] [P] [R] p f.
 
-  Definition lFix_out (P : Type -> Type) (map : monotone P) (x : LFix P) : P (LFix P) :=
-    match x with
-    | LFix_in _ p f => map _ _ f p
-    end.
+  Definition lFix_out S P (R : Occ P) (map : monotone R)
+    : LFix S R -> P (LFix S R) :=
+    fun x => match x with
+             | LFix_in p f => map _ _ p f
+             end.
 
-  Fixpoint cata B P (map : monotone P) (f : P B -> B) (x : LFix P) : B :=
-    match x with
-    | LFix_in _ p k => f (map _ _ (fun n => cata map f (k n)) p)
-    end.
+  Definition cata A B P (R : Occ P) (map : monotone R)
+    : (P B -> B) -> LFix A R -> B
+    := fun g => fix f x :=
+         match x with
+         | LFix_in p k => g (map _ _ p (fun n e => f (k n e)))
+         end.
 
-  Definition P_Finite (P : Type -> Type) := forall S, P S -> option (P False).
+  Inductive Finite S P (R : Occ P) : GFix S R -> Prop :=
+  | Fin_fold (p : P S) (f : forall (t : S), R S t p -> GFix S R) :
+      (forall s (occ : R S s p), Finite (f s occ)) ->
+      Finite (GFix_in p f).
 
-  (* I need to state "if p contains s, then ..." *)
-  Inductive Finite S P (T : P_Finite P) (occ : P S -> seq S)
-            : GFix S P -> Prop :=
-  | Fin_fold1 (x : P S) (p : P False) f :
-      T _ x = Some p ->
-      Finite T occ (GFix_in x f)
-  | Fin_fold2 (p : P S) (f : S -> GFix S P) :
-      T _ p = None ->
-      (forall s, List.In s (occ p) -> Finite T occ (f s)) ->
-      (* I need to add something here, or change P_Finite in some way *)
-      Finite T occ (GFix_in p f).
+  Definition dec_eq (S : Type) P := forall (x y : P S), decidable (x = y).
 
-  Lemma Finite_inv1 S P (T : P_Finite P) (occ : P S -> seq S)
-        (p0 : GFix S P) (p : P S) (f : S -> GFix S P) :
-    Finite T occ p0 ->
+  Lemma Finite_inv1 S P (R : Occ P) (p0 : GFix S R) (dec : dec_eq S P)
+        (p : P S) (f : forall (t : S), R S t p -> GFix S R) :
+    Finite p0 ->
     p0 = GFix_in p f ->
-    T _ p = None ->
-    forall s, List.In s (occ p) -> Finite T occ (f s).
-  Proof. by case=>[x p1 f0 E [<-_]|p1 f1 _ H1 [<-<-]//]; move: E=>->. Defined.
-
-  Lemma Finite_inv2 S (P : Type -> Type)
-        (T : P_Finite P)
-        (occ : P S -> seq S)
-        (f : S -> P S) (x : S) (y : P S) :
-    Finite T occ (ana f x) ->
-    T _ (f x) = None ->
-    forall s, List.In s (occ (f x)) -> Finite T occ (ana f s).
+    forall s (occ : R S s p), Finite (f s occ).
   Proof.
-    rewrite (gfix_unfold_id (ana f x)) /= -/ana.
-    by case E: _ / =>[z pF f' T_z|z f' T_z]; move: E T_z=>[-> ->]->//.
+    case=> p1 f0 H [E]; move: E f0 H=>->f0 H {p1}.
+    set F := fun p1 : P S => _.
+    by move => /(inj_pair2_eq_dec (P S) dec F p f0 f)<-.
   Defined.
 
-  Fixpoint fromGFix S P (is_empty : P_Finite P) (occ : P S -> seq S) (p : GFix S P)
-           (F : Finite is_empty occ p) {struct F} : LFix P
-    := match p as p0 return p = p0 -> LFix P with
+  Lemma Finite_inv2 S P (R : Occ P) (dec : dec_eq S P)
+        (g : S -> P S) (x : S) (p : P S) :
+    Finite (ana R g x) ->
+    forall s (occ : R S s (g x)), Finite (ana R g s).
+  Proof.
+    move=> F s r; move: F.
+    do 2 rewrite (gfix_unfold_id (ana _ _ _)) /=.
+    move=> E; move: (Finite_inv1 dec E erefl) => /(_ s r)-H.
+    move: H.
+    by rewrite (gfix_unfold_id ((cofix f x0 := GFix_in _ _) s)) /=.
+  Defined.
+
+  Fixpoint fromGFix S P (R : Occ P) (eq : dec_eq S P)
+           (p : GFix S R) (F : Finite p) {struct F} : LFix S R
+    := match p as p0 return p = p0 -> LFix S R with
        | GFix_in p f =>
-         fun PF =>
-           match is_empty _ p as p0 return is_empty _ p = p0 -> LFix P with
-           | Some p' =>
-             fun _ =>
-               LFix_in p' (False_rect _)
-           | None =>
-             fun EQ =>
-               LFix_in p (fun n => fromGFix (Finite_inv1 F PF EQ n))
-           end erefl
+         fun PF => LFix_in p (fun n a => fromGFix eq (Finite_inv1 eq F PF a))
        end erefl.
 
-  Fixpoint fcata A B P (is_empty : P_Finite P) (map : monotone P) (f : P B -> B)
-           (x : GFix A P) (F : Finite is_empty x) {struct F} : B :=
-    match x as x0 return x = x0 -> B with
-    | GFix_in p k =>
-      fun PF =>
-        match is_empty _ p as p0 return is_empty _ p = p0 -> B with
-        | Some p' =>
-          fun _ =>
-            f (map _ _ (False_rect _) p')
-        | None =>
-          fun EQ =>
-            f (map _ _ (fun n => fcata map f (Finite_inv1 F PF EQ n)) p)
-        end erefl
-    end erefl.
+  Fixpoint fcata A B P (R : Occ P) (eq : dec_eq A P) (map : monotone R)
+           (f : P B -> B) (p : GFix A R) (F : Finite p) {struct F} : B
+    := match p as p0 return p = p0 -> B with
+       | GFix_in p k =>
+         fun PF =>
+           f (map _ _ p
+                  (fun n a => fcata eq map f (Finite_inv1 eq F PF a)))
+       end erefl.
 
-  Definition fhylo A B P (is_empty : P_Finite P) (map : monotone P)
-             (g : P B -> B) (h : A -> P A)
-    : forall (x : A), Finite is_empty (ana h x) -> B :=
-    fix f (x : A) (F : Finite is_empty (ana h x)) {struct F} :=
-      let h_x := h x in
-      match is_empty _ h_x as y return is_empty _ h_x = y -> B with
-      | Some p => fun EQ => g (map _ _ (False_rect _) p)
-      | None => fun EQ => g (map _ _ (fun s => f s (Finite_inv2 h_x F EQ s)) h_x)
-      end erefl.
+  Definition fhylo A B P (R : Occ P) (eq : dec_eq A P) (map : monotone R)
+    : forall (g : P B -> B) (h : A -> P A) (x : A), Finite (ana R h x) -> B
+    := fun g h =>
+         fix f (x : A) (F : Finite (ana R h x)) {struct F} :=
+         g (map _ _ (h x) (fun n Occ => f n (Finite_inv2 eq (h x) F Occ))).
 End FixGen.
 
 Section ExampleInfTree.
   Inductive treeP (A : Type) (t : Type) : Type :=
   | C : A -> list t -> treeP A t.
 
-  Definition citree S A := GFix S (treeP A).
+  Inductive treeOcc A : forall (X : Type), X -> treeP A X -> Prop :=
+  | Occ_in a X (x : X) (l : list X) : List.In x l -> treeOcc x (C a l).
+
+  Definition citree A S := GFix S (@treeOcc A).
 
   Fixpoint downfrom n :=
     match n with
@@ -137,17 +132,19 @@ Section ExampleInfTree.
     end.
 
   Definition exn (n : nat) : citree nat nat :=
-    ana (fun n => (C n (downfrom n))) n.
+    ana (@treeOcc nat) (fun n => (C n (downfrom n))) n.
 End ExampleInfTree.
 
 Section QSort.
   Inductive P A T := Empty | Div (PIVOT : A) (LEFT : T) (RIGHT : T).
 
-  Definition test A B (x : P A B) : option (P A False) :=
-    match x with
-    | Empty => Some (Empty _ _)
-    | _ => None
-    end.
+  Inductive P_occ A X : X -> P A X -> Prop :=
+  | in_l (PIVOT : A) (LEFT RIGHT : X) : P_occ LEFT (Div PIVOT LEFT RIGHT)
+  | in_r (PIVOT : A) (LEFT RIGHT : X) : P_occ RIGHT (Div PIVOT LEFT RIGHT).
+
+  Derive Inversion occ_inv with (forall A X x p, @P_occ A X x p) Sort Prop.
+  Derive Inversion occ_inv_div
+    with (forall A X x h l r, @P_occ A X x (Div h l r)) Sort Prop.
 
   Definition p_split (l : seq nat) : P nat (seq nat) :=
     match l with
@@ -161,12 +158,57 @@ Section QSort.
     | Div h l r => l ++ h :: r
     end.
 
-  Lemma p_split_terminates : forall l, Finite (@test nat) (ana p_split l).
+  Lemma occ_not_empty A B s : ~ P_occ s (Empty A B).
+  Proof. by elim/occ_inv. Qed.
+
+  Lemma occ_div A B s (h : A) (l r : B) : P_occ s (Div h l r) -> s = l \/ s = r.
   Proof.
-    move=>l; move: {-1} (size l) (leqnn (size l)) => n LE.
-    elim: n=>[|n Ih] in l LE *; case: l LE=>[|h t]//=.
-    - by rewrite (gfix_unfold_id (ana _ _))/= -/ana=> _; apply/Fin_fold1.
-    - by rewrite (gfix_unfold_id (ana _ _))/= -/ana=> _; apply/Fin_fold1.
-    - rewrite (gfix_unfold_id (ana _ _))/= -/ana.
-      move=> LE; apply/Fin_fold2=>// s.
-End MSort.
+    by elim/occ_inv_div=> _ PIVOT LEFT RIGHT <-_<-<-; [left|right].
+  Qed.
+
+  Lemma p_split_terminates (l : seq nat) : Finite (ana (@P_occ nat) p_split l).
+  Proof.
+    move: {-1} (size l) (leqnn (size l)) => n LE.
+    rewrite (gfix_unfold_id (ana _ _ _))/=.
+    elim: n=>[|n Ih] in l LE *; case: l LE=>/=[|h t]// LE; constructor.
+    - by move=> s E; move: (occ_not_empty E).
+    - by move=> s E; move: (occ_not_empty E).
+    - move=> s E; case (occ_div E)=>->/=.
+      + rewrite (gfix_unfold_id (_ [seq x <- t | x <= h])) /=.
+        apply/Ih; rewrite size_filter.
+        by move: (leq_ltn_trans (count_size (leq^~ h) t) LE).
+      + rewrite (gfix_unfold_id (_ [seq x <- t | h < x])) /=.
+        apply/Ih; rewrite size_filter.
+        by move: (leq_ltn_trans (count_size [eta leq h.+1] t) LE).
+  Qed.
+
+  Lemma deq : dec_eq (seq nat) (P nat).
+    move=> x y.
+    rewrite /decidable.
+    case: x; case: y=>//; try (by right); try (by left).
+    move=> PIVOT LEFT RIGHT PIVOT0 LEFT0 RIGHT0.
+    case: (PIVOT0 =P PIVOT)=>[->|F]; last by right => [[/F]].
+    case: (LEFT0 =P LEFT)=>[->|F]; last by right => [[/F]].
+    case: (RIGHT0 =P RIGHT)=>[->|F]; last by right => [[/F]].
+    by left.
+  Defined.
+
+  Definition pmap A : monotone (@P_occ A) :=
+    fun X Y (x : P A X) f =>
+      match x as x0 return x = x0 -> P A Y with
+      | Empty => fun _ => Empty _ _
+      | Div h l r =>
+        fun PF =>
+          match PF in _ = x return P_occ l x -> P_occ r x -> P A Y with
+          | erefl => fun pl pr => Div h (f l pl) (f r pr)
+          end (in_l h l r) (in_r h l r)
+      end erefl.
+
+  Definition msort (x : seq nat) := fhylo deq (@pmap nat) p_merge (p_split_terminates x).
+End QSort.
+Require Extraction.
+Extraction Inline pmap.
+Extraction Inline fhylo.
+Extraction Inline p_merge.
+Extraction Inline p_split.
+Recursive Extraction msort.
