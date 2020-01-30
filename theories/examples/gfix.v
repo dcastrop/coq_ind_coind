@@ -138,11 +138,33 @@ End ExampleInfTree.
 Section QSort.
   Inductive P A T := Empty | Div (PIVOT : A) (LEFT : T) (RIGHT : T).
 
+  Lemma deq : dec_eq (seq nat) (P nat).
+    move=> x y.
+    rewrite /decidable.
+    case: x; case: y=>//; try (by right); try (by left).
+    move=> PIVOT LEFT RIGHT PIVOT0 LEFT0 RIGHT0.
+    case: (PIVOT0 =P PIVOT)=>[->|F]; last by right => [[/F]].
+    case: (LEFT0 =P LEFT)=>[->|F]; last by right => [[/F]].
+    case: (RIGHT0 =P RIGHT)=>[->|F]; last by right => [[/F]].
+    by left.
+  Defined.
+
   Definition P_occ A X : X -> P A X -> Prop :=
     fun x p => match p with
                | Empty => False
                | Div _ l r => x = l \/ x = r
                end.
+
+  Definition pmap A : monotone (@P_occ A) :=
+    fun X Y (x : P A X) f =>
+      match x as x0 return x = x0 -> P A Y with
+      | Empty => fun _ => Empty _ _
+      | Div h l r =>
+        fun PF =>
+          match PF in _ = x return P_occ l x -> P_occ r x -> P A Y with
+          | erefl => fun pl pr => Div h (f l pl) (f r pr)
+          end (or_introl erefl) (or_intror erefl)
+      end erefl.
 
   Definition p_split (l : seq nat) : P nat (seq nat) :=
     match l with
@@ -159,40 +181,14 @@ Section QSort.
   Lemma p_split_terminates (l : seq nat) : Finite (ana (@P_occ nat) p_split l).
   Proof.
     move: {-1} (size l) (leqnn (size l)) => n LE.
-    rewrite (gfix_unfold_id (ana _ _ _))/=.
-    elim: n=>[|n Ih] in l LE *; case: l LE=>/=[|h t]// LE; constructor.
-    move=> s /= [-> | ->].
-    + rewrite (gfix_unfold_id (_ [seq x <- t | x <= h])) /=.
-      apply/Ih; rewrite size_filter.
-      by move: (leq_ltn_trans (count_size (leq^~ h) t) LE).
-    + rewrite (gfix_unfold_id (_ [seq x <- t | h < x])) /=.
-      apply/Ih; rewrite size_filter.
-      by move: (leq_ltn_trans (count_size [eta leq h.+1] t) LE).
+    elim: n=>[|n Ih] in l LE *; case: l LE=>[|h t]//= LE;
+      rewrite (gfix_unfold_id (ana _ _ _))//; constructor => s []->; apply/Ih.
+    + by rewrite size_filter; move: (leq_ltn_trans (count_size (leq^~ h) t) LE).
+    + by rewrite size_filter; move: (leq_ltn_trans (count_size [eta leq h.+1] t) LE).
   Qed.
 
-  Lemma deq : dec_eq (seq nat) (P nat).
-    move=> x y.
-    rewrite /decidable.
-    case: x; case: y=>//; try (by right); try (by left).
-    move=> PIVOT LEFT RIGHT PIVOT0 LEFT0 RIGHT0.
-    case: (PIVOT0 =P PIVOT)=>[->|F]; last by right => [[/F]].
-    case: (LEFT0 =P LEFT)=>[->|F]; last by right => [[/F]].
-    case: (RIGHT0 =P RIGHT)=>[->|F]; last by right => [[/F]].
-    by left.
-  Defined.
-
-  Definition pmap A : monotone (@P_occ A) :=
-    fun X Y (x : P A X) f =>
-      match x as x0 return x = x0 -> P A Y with
-      | Empty => fun _ => Empty _ _
-      | Div h l r =>
-        fun PF =>
-          match PF in _ = x return P_occ l x -> P_occ r x -> P A Y with
-          | erefl => fun pl pr => Div h (f l pl) (f r pr)
-          end (or_introl erefl) (or_intror erefl)
-      end erefl.
-
-  Definition msort (x : seq nat) : seq nat := fhylo deq (@pmap nat) p_merge (p_split_terminates x).
+  Definition msort (x : seq nat) : seq nat
+    := fhylo deq (@pmap nat) p_merge (p_split_terminates x).
 End QSort.
 From Coq Require Extraction ExtrOcamlBasic ExtrOcamlIntConv ExtrOcamlNatInt.
 Extraction Inline pmap.
