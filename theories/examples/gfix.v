@@ -110,9 +110,9 @@ Section FixGen.
        end erefl.
 
   Definition fhylo A B P (R : Occ P) (eq : dec_eq A P) (map : monotone R)
-    : forall (g : P B -> B) (h : A -> P A) (x : A), Finite (ana R h x) -> B
-    := fun g h =>
-         fix f (x : A) (F : Finite (ana R h x)) {struct F} :=
+           (g : P B -> B) (h : A -> P A)
+    : forall (x : A) (F : Finite (ana R h x)), B
+    := fix f (x : A) (F : Finite (ana R h x)) {struct F} :=
          g (map _ _ (h x) (fun n Occ => f n (Finite_inv2 eq (h x) F Occ))).
 End FixGen.
 
@@ -138,13 +138,11 @@ End ExampleInfTree.
 Section QSort.
   Inductive P A T := Empty | Div (PIVOT : A) (LEFT : T) (RIGHT : T).
 
-  Inductive P_occ A X : X -> P A X -> Prop :=
-  | in_l (PIVOT : A) (LEFT RIGHT : X) : P_occ LEFT (Div PIVOT LEFT RIGHT)
-  | in_r (PIVOT : A) (LEFT RIGHT : X) : P_occ RIGHT (Div PIVOT LEFT RIGHT).
-
-  Derive Inversion occ_inv with (forall A X x p, @P_occ A X x p) Sort Prop.
-  Derive Inversion occ_inv_div
-    with (forall A X x h l r, @P_occ A X x (Div h l r)) Sort Prop.
+  Definition P_occ A X : X -> P A X -> Prop :=
+    fun x p => match p with
+               | Empty => False
+               | Div _ l r => x = l \/ x = r
+               end.
 
   Definition p_split (l : seq nat) : P nat (seq nat) :=
     match l with
@@ -158,28 +156,18 @@ Section QSort.
     | Div h l r => l ++ h :: r
     end.
 
-  Lemma occ_not_empty A B s : ~ P_occ s (Empty A B).
-  Proof. by elim/occ_inv. Qed.
-
-  Lemma occ_div A B s (h : A) (l r : B) : P_occ s (Div h l r) -> s = l \/ s = r.
-  Proof.
-    by elim/occ_inv_div=> _ PIVOT LEFT RIGHT <-_<-<-; [left|right].
-  Qed.
-
   Lemma p_split_terminates (l : seq nat) : Finite (ana (@P_occ nat) p_split l).
   Proof.
     move: {-1} (size l) (leqnn (size l)) => n LE.
     rewrite (gfix_unfold_id (ana _ _ _))/=.
     elim: n=>[|n Ih] in l LE *; case: l LE=>/=[|h t]// LE; constructor.
-    - by move=> s E; move: (occ_not_empty E).
-    - by move=> s E; move: (occ_not_empty E).
-    - move=> s E; case (occ_div E)=>->/=.
-      + rewrite (gfix_unfold_id (_ [seq x <- t | x <= h])) /=.
-        apply/Ih; rewrite size_filter.
-        by move: (leq_ltn_trans (count_size (leq^~ h) t) LE).
-      + rewrite (gfix_unfold_id (_ [seq x <- t | h < x])) /=.
-        apply/Ih; rewrite size_filter.
-        by move: (leq_ltn_trans (count_size [eta leq h.+1] t) LE).
+    move=> s /= [-> | ->].
+    + rewrite (gfix_unfold_id (_ [seq x <- t | x <= h])) /=.
+      apply/Ih; rewrite size_filter.
+      by move: (leq_ltn_trans (count_size (leq^~ h) t) LE).
+    + rewrite (gfix_unfold_id (_ [seq x <- t | h < x])) /=.
+      apply/Ih; rewrite size_filter.
+      by move: (leq_ltn_trans (count_size [eta leq h.+1] t) LE).
   Qed.
 
   Lemma deq : dec_eq (seq nat) (P nat).
@@ -201,14 +189,15 @@ Section QSort.
         fun PF =>
           match PF in _ = x return P_occ l x -> P_occ r x -> P A Y with
           | erefl => fun pl pr => Div h (f l pl) (f r pr)
-          end (in_l h l r) (in_r h l r)
+          end (or_introl erefl) (or_intror erefl)
       end erefl.
 
-  Definition msort (x : seq nat) := fhylo deq (@pmap nat) p_merge (p_split_terminates x).
+  Definition msort (x : seq nat) : seq nat := fhylo deq (@pmap nat) p_merge (p_split_terminates x).
 End QSort.
-Require Extraction.
+From Coq Require Extraction ExtrOcamlBasic ExtrOcamlIntConv ExtrOcamlNatInt.
 Extraction Inline pmap.
 Extraction Inline fhylo.
 Extraction Inline p_merge.
 Extraction Inline p_split.
-Recursive Extraction msort.
+Set Extraction Optimize.
+Recursive Extraction msort pmap.
