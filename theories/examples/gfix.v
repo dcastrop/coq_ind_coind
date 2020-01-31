@@ -6,7 +6,7 @@ Import Prenex Implicits.
 
 Module Type FUNCTOR.
   Parameter (L : Type).
-  Parameter (F : Type -> Type).
+  Parameter (F : forall (t : Type),  Type).
   Parameter (OCC : forall (X : Type), X -> F X -> Prop).
   Axiom (omap : forall (X Y : Type) p, (forall (x : X), OCC x p -> Y) -> F Y).
 End FUNCTOR.
@@ -217,30 +217,35 @@ Module FinGFix (M : FUNCTOR) (F : SPF(M)).
 End FinGFix.
 
 Module TreeF : FUNCTOR.
-  Definition L := nat.
-  Inductive F (t : Type) : Type :=
-  | C : nat -> seq t -> F t.
+  Definition L : Type := nat.
+  Inductive T (t : Type) : Type :=
+  | C : nat -> seq t -> T t.
+  Definition F : Type -> Type := T.
 
-  Definition OCC X (x : X) (t : F X) : Prop :=
+  Definition OCC (X : Type) (x : X) (t : F X) : Prop :=
     match t with
     | C _ l => List.In x l
     end.
 
-  Definition lmap X Y (l : seq X) (f : forall (x : X))
-
-  Definition omap X Y (p : F X) (f : forall (x : X), OCC x p -> Y) : F Y
-    := match p with
-       | C h l => C h (map (fun x => f x _) l)(* ((fix lmap l := *)
-         (* match l return List.In x l -> seq Y with *)
-         (* | [::] => fun _ => [::] *)
-         (* | h :: t => fun pf => _ *)
-         (* end) l) *)
+  Fixpoint lmap X Y (l : seq X) {struct l}
+    : (forall (x : X), List.In x l -> Y) -> seq Y
+    := match l return (forall (x : X), List.In x l -> Y) -> seq Y with
+       | [::] =>
+         fun _ =>
+           [::]
+       | h :: t =>
+         fun fn =>
+           fn h (or_introl (erefl h)) :: lmap (fun x p => fn x (or_intror p))
        end.
 
-  Definition omap
-
+  Definition omap (X Y : Type) (p : F X) : (forall (x : X), OCC x p -> Y) -> F Y
+    := match p return (forall (x : X), OCC x p -> Y) -> F Y with
+       | C h l => fun f => C h (lmap f)
+       end.
 End TreeF.
+Module CTree := GFix(TreeF).
 
+Section ExampleInfTree.
   Definition citree S A := GFix S (@treeOcc A).
 
   Fixpoint downfrom n :=
