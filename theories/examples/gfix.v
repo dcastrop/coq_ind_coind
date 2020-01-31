@@ -1,17 +1,11 @@
-Require Import Eqdep_dec.
-
+From Paco Require Import paco paco2.
 Set Implicit Arguments.
-Unset Strict Implicit.
-Import Prenex Implicits.
 
 Section FixGen.
-  Definition dec X := forall (x y : X), {x = y} + {x <> y}.
-
   Context
     (F : Type -> Type)
     (OCC : forall (X : Type), X -> F X -> Prop)
     (fmap : forall (X Y : Type) p, (forall (x : X), OCC X x p -> Y) -> F Y)
-    (* (f_dec_eq : forall S, dec S -> dec (F S)) *)
   .
   Arguments OCC [X] x f_x.
   Arguments fmap [X Y] [p] f.
@@ -20,6 +14,18 @@ Section FixGen.
   | GFix_in (p : F T) : (forall (t : T), OCC t p -> GFix T) -> GFix T.
   Notation "[ 'G_IN' f | x ]"
     := (GFix_in (fun y (_ : OCC y x) => f y)) (at level 0).
+
+  (* Could generalize to [GFix T -> GFix T' -> Prop], but would require an
+   * extra relation to "zip" elements of [F]
+   *)
+  Definition GFix_EQ_ T (r : GFix T -> GFix T -> Prop) (g1 g2 : GFix T) : Prop :=
+    match g1, g2 with
+    | @GFix_in _ p1 f1, @GFix_in _ p2 f2
+      => p1 = p2 /\ (forall t o1 o2, r (f1 t o1) (f2 t o2))
+    end.
+  Lemma GFix_EQ_mon T : monotone2 (@GFix_EQ_ T).
+  Proof. intros [p1 f1] [p2 f2] r r' [E1 H1] F1; simpl; eauto. Qed.
+  Hint Resolve GFix_EQ_mon.
 
   Definition gFix_out T (x : GFix T) : F (GFix T) :=
     match x with
@@ -37,19 +43,20 @@ Section FixGen.
   Lemma gfix_unfold_id A (x : GFix A) : x = gfix_unfold x.
   Proof with eauto. destruct x... Qed.
 
-  (* An alternative is having a single constructor [LFix_in S : P S -> (S ->
-     LFix P) -> LFix P], but this requires the use of axioms, or restricting [S]
-     to have decidable equality *)
-  (* Inductive LFix S (P : Type -> Type) : Type := *)
-  (* | LFix_in1 : P False -> LFix S P *)
-  (* | LFix_in2 : P S -> (S -> LFix S P) -> LFix S P. *)
-
   Inductive LFix T : Type :=
   | LFix_in (p : F T) : (forall (t : T), OCC t p -> LFix T) -> LFix T.
   Notation "[ 'L_FMAP' f | x ]"
     := (match x with
         | LFix_in k => fmap (fun n e => f (k n e))
         end) (at level 0).
+
+  Inductive LFix_EQ T : LFix T -> LFix T -> Prop :=
+  | L_eq p p' f f' :
+      p = p' ->
+      (forall x, OCC x p <-> OCC x p') ->
+      (forall t (o : OCC t p) (o' : OCC t p'), LFix_EQ (f t o) (f' t o')) ->
+      LFix_EQ (LFix_in f) (LFix_in f').
+
 
   Definition lFix_out S (x : LFix S) : F (LFix S) :=
     match x with
