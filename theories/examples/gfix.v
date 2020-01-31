@@ -216,8 +216,6 @@ Section QSort.
       apply leb_le in EQ; apply leb_le, (le_trans _ (length l) n); eauto.
   Qed.
 
-  About cata.
-
   Definition app A : LFix A _ -> list nat := cata (@pmap nat) p_merge.
   Definition spl1 (x : list nat) := fana (p_split_terminates x).
   Definition spl2 := ana (@P_occ nat) p_split.
