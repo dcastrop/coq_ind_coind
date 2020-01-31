@@ -1,8 +1,11 @@
 From Paco Require Import paco paco2.
 Set Implicit Arguments.
+Unset Strict Implicit.
+(* Import Prenex Implicits. *)
 
 Section FixGen.
   Context
+    (L : Type)
     (F : Type -> Type)
     (OCC : forall (X : Type), X -> F X -> Prop)
     (fmap : forall (X Y : Type) p, (forall (x : X), OCC X x p -> Y) -> F Y)
@@ -10,88 +13,95 @@ Section FixGen.
   Arguments OCC [X] x f_x.
   Arguments fmap [X Y] [p] f.
 
-  CoInductive GFix T : Type :=
-  | GFix_in (p : F T) : (forall (t : T), OCC t p -> GFix T) -> GFix T.
+  Definition unlabel A (x : {p : F L & forall t (o : OCC t p), A}) : F A :=
+    fmap (projT2 x).
+
+  CoInductive GFix : Type :=
+  | GFix_in (p : F L) : (forall (t : L), OCC t p -> GFix) -> GFix.
   Notation "[ 'G_IN' f | x ]"
     := (GFix_in (fun y (_ : OCC y x) => f y)) (at level 0).
 
-  (* Could generalize to [GFix T -> GFix T' -> Prop], but would require an
-   * extra relation to "zip" elements of [F]
-   *)
-  Definition GFix_EQ_ T (r : GFix T -> GFix T -> Prop) (g1 g2 : GFix T) : Prop :=
-    match g1, g2 with
-    | @GFix_in _ p1 f1, @GFix_in _ p2 f2
-      => p1 = p2 /\ (forall t o1 o2, r (f1 t o1) (f2 t o2))
-    end.
-  Lemma GFix_EQ_mon T : monotone2 (@GFix_EQ_ T).
-  Proof. intros [p1 f1] [p2 f2] r r' [E1 H1] F1; simpl; eauto. Qed.
-  Hint Resolve GFix_EQ_mon.
-
-  Definition gFix_out T (x : GFix T) : F (GFix T) :=
-    match x with
-    | GFix_in f => fmap f
-    end.
-
-  Definition ana A (h : A -> F A) : A -> GFix A
-    := cofix f x := [G_IN f | h x].
-
-  Definition gfix_unfold A (x : GFix A) : GFix A :=
+  Definition gfix_unfold (x : GFix) : GFix :=
     match x with
     | GFix_in f => GFix_in f
     end.
 
-  Lemma gfix_unfold_id A (x : GFix A) : x = gfix_unfold x.
+  Lemma gfix_unfold_id (x : GFix) : x = gfix_unfold x.
   Proof with eauto. destruct x... Qed.
 
-  Inductive LFix T : Type :=
-  | LFix_in (p : F T) : (forall (t : T), OCC t p -> LFix T) -> LFix T.
+  (* Could generalize to [GFix T -> GFix T' -> Prop], but would require an
+   * extra relation to "zip" elements of [F]
+   *)
+  Definition GFix_EQ_ (r : GFix -> GFix -> Prop) (g1 g2 : GFix) : Prop :=
+    match g1, g2 with
+    | @GFix_in p1 f1, @GFix_in p2 f2
+      => p1 = p2 /\ (forall t o1 o2, r (f1 t o1) (f2 t o2))
+    end.
+  Lemma GFix_EQ_mon : monotone2 GFix_EQ_.
+  Proof. intros [p1 f1] [p2 f2] r r' [E1 H1] F1; simpl; eauto. Qed.
+  Hint Resolve GFix_EQ_mon.
+  Definition G_EQ l r := paco2 GFix_EQ_ bot2 l r.
+
+  Definition gFix_out (x : GFix) : F GFix :=
+    match x with
+    | GFix_in f => fmap f
+    end.
+
+  Definition ana (h : L -> F L) : L -> GFix
+    := cofix f x := [G_IN f | h x].
+
+  Lemma ana_unfold (h : L -> F L) :
+    forall x, ana h x = [G_IN ana h | h x].
+  Proof. intros x; rewrite (gfix_unfold_id (ana h x)); eauto. Qed.
+
+
+  Inductive LFix : Type :=
+  | LFix_in (p : F L) : (forall (t : L), OCC t p -> LFix) -> LFix.
   Notation "[ 'L_FMAP' f | x ]"
     := (match x with
         | LFix_in k => fmap (fun n e => f (k n e))
         end) (at level 0).
 
-  Inductive LFix_EQ T : LFix T -> LFix T -> Prop :=
-  | L_eq p p' f f' :
-      p = p' ->
-      (forall x, OCC x p <-> OCC x p') ->
-      (forall t (o : OCC t p) (o' : OCC t p'), LFix_EQ (f t o) (f' t o')) ->
-      LFix_EQ (LFix_in f) (LFix_in f').
+  Fixpoint LFix_EQ (p1 p2: LFix) : Prop :=
+    match p1, p2 with
+    | @LFix_in p1 f1, @LFix_in p2 f2 =>
+      p1 = p2 /\ (forall t o1 o2, LFix_EQ (f1 t o1) (f2 t o2))
+    end.
 
-
-  Definition lFix_out S (x : LFix S) : F (LFix S) :=
+  Definition lFix_out (x : LFix) : F LFix :=
     match x with
     | LFix_in f => fmap f
     end.
 
-  Definition cata A B (h : F B -> B) : LFix A -> B
+  Definition cata A (h : F A -> A) : LFix -> A
     := fix f x :=
          match x with
          | LFix_in k => h (fmap (fun n e => f (k n e)))
          end.
 
-  Inductive Finite S : GFix S -> Prop :=
-  | Fin_fold (p : F S) (f : forall t, OCC t p -> GFix S) :
+  Inductive Finite : GFix -> Prop :=
+  | Fin_fold (p : F L) (f : forall t, OCC t p -> GFix) :
       (forall s (occ : OCC s p), Finite (f s occ)) -> Finite (GFix_in f).
 
-  Lemma Fin_inv1 S (p0 : GFix S) (p : F S) (f : forall t, OCC t p -> GFix S) :
+  Lemma Fin_inv1 p0 p (f : forall t, OCC t p -> GFix) :
     Finite p0 -> p0 = GFix_in f -> forall s (occ : OCC s p), Finite (f s occ).
   Proof with eauto. intros [p1 f0 H] E; inversion E... Defined.
 
-  Fixpoint fromGFix S (p : GFix S) (F : Finite p) {struct F} : LFix S
-    := match p as p0 return p = p0 -> LFix S with
+  Fixpoint fromGFix (p : GFix) (F : Finite p) {struct F} : LFix
+    := match p as p0 return p = p0 -> LFix with
        | GFix_in f =>
          fun PF => LFix_in (fun n a => fromGFix (Fin_inv1 F PF a))
        end eq_refl.
 
-  Definition fcata A B (g : F B -> B) : forall (p : GFix A), Finite p -> B
+  Definition fcata A (g : F A -> A) : forall (p : GFix), Finite p -> A
     := fix f p FIN {struct FIN} :=
-         g (match p as p0 return p = p0 -> F B with
+         g (match p as p0 return p = p0 -> F A with
            | GFix_in k =>
              fun PF =>
                fmap (fun n a => f (k n a) (Fin_inv1 FIN PF a))
            end eq_refl).
 
-  Lemma Fin_inv2 S (g : S -> F S) (x : S) (p : F S) :
+  Lemma Fin_inv2 (g : L -> F L) (x : L) (p : F L) :
     Finite (ana g x) -> forall s (occ : OCC s (g x)), Finite (ana g s).
   Proof.
     intros FIN s r.
@@ -102,19 +112,20 @@ Section FixGen.
     rewrite gfix_unfold_id; simpl.
     trivial.
   Defined.
+  Arguments Fin_inv2 [g] [x] p F0 [s] occ.
 
-  Definition fana A (h : A -> F A) : forall (x : A), Finite (ana h x) -> LFix A
+  Definition fana (h : L -> F L) : forall x, Finite (ana h x) -> LFix
     := fix f x F := LFix_in (fun x occ => f x (Fin_inv2 (h x) F occ)).
 
-  Definition thylo A B (g : F B -> B) (h : A -> F A)
-    : forall (x : A) (F : Finite (ana h x)), B
+  Definition thylo B (g : F B -> B) (h : L -> F L)
+    : forall (x : L) (F : Finite (ana h x)), B
     := fix f x F := g (fmap (fun n occ => f n (Fin_inv2 (h x) F occ))).
 
-  Definition fhylo A B
+  Definition fhylo B
              (g : F B -> B)
-             (h : A -> F A)
+             (h : L -> F L)
              (FIN : forall x, Finite (ana h x))
-    : A -> B := fun x => thylo g (FIN x).
+    : L -> B := fun x => thylo g (FIN x).
 
   (* Goal forall A B P (R : Occ P) (eq : p_dec_eq A P) (map : monotone R) *)
   (*             (g : P B -> B) (h : A -> P A) (x : A) (F : Finite (ana R h x)), *)
@@ -134,7 +145,7 @@ Section ExampleInfTree.
     | C _ l => In x l
     end.
 
-  Definition citree A S := GFix (@treeOcc A) S.
+  Definition citree S A := GFix S (@treeOcc A).
 
   Fixpoint downfrom n :=
     match n with
@@ -205,7 +216,9 @@ Section QSort.
       apply leb_le in EQ; apply leb_le, (le_trans _ (length l) n); eauto.
   Qed.
 
-  Definition app A : LFix _ A -> list nat := cata (@pmap nat) p_merge.
+  About cata.
+
+  Definition app A : LFix A _ -> list nat := cata (@pmap nat) p_merge.
   Definition spl1 (x : list nat) := fana (p_split_terminates x).
   Definition spl2 := ana (@P_occ nat) p_split.
 
