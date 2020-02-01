@@ -147,6 +147,13 @@ Section Definitions.
     fmap_dom (fun n (o : n \pos g_out (proj1_sig x)) =>
                   exist _ _ (Fin_inv1 (proj2_sig x) o)).
 
+  Lemma lg_in_out : lg_in \o lg_out =1 id.
+  Proof.
+    case=>//=; case=>//=; case=>//= s f FIN.
+    rewrite /lg_out/lg_in/lg_forget/fmap/lg_fin/=.
+    (* I need extensionality as well in the result *)
+  Abort.
+
   Definition cata_ A (g : App A -> A) : forall p, Finite p -> A
     := fix f p FIN {struct FIN} :=
          g (fmap_dom (fun n a => f (get a) (Fin_inv1 FIN a))).
