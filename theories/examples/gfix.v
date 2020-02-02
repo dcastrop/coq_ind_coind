@@ -297,10 +297,9 @@ Module QSort.
   Lemma p_split_terminates (l : list nat) : Finite (ana p_split_ l).
   Proof.
     move: {-1}(size l) (leqnn (size l)) => n LE; move: l LE.
-    elim: n=>[|n Ih];case=>[|h t]/= LE; rewrite ana_unroll//; constructor=>/=.
-    (* by move=> y []->; apply/Ih; rewrite size_filter; apply/(leq_trans (count_size _ _)). *)
-  (* Qed. *)
-  Admitted.
+    elim: n=>[|n Ih];case=>[|h t]/= LE; rewrite ana_unroll//; constructor=>[[//=]].
+    by move=> y []->; apply/Ih; rewrite size_filter; apply/(leq_trans (count_size _ _)).
+  Qed.
 
   Definition p_split : seq nat +> App (seq nat) (@F_OCC nat) (seq nat) :=
     exist _ _ p_split_terminates.
@@ -310,7 +309,7 @@ Module QSort.
   Definition app A : LFix A _ -> list nat := cata (@p_merge A).
 
   Definition qsort : list nat -> list nat
-    := fhylo (@p_merge (list nat)) p_split.
+    := fun x => fhylo (@p_merge (list nat)) p_split x.
 End QSort.
 
 (* From Coq Require Extraction ExtrHaskellBasic ExtrHaskellNatInteger. *)
@@ -320,6 +319,7 @@ Extraction Inline pmap.
 Extraction Inline shape.
 Extraction Inline get.
 Extraction Inline fmap_dom.
+Extraction Inline fmap.
 Extraction Inline comp.
 Extraction Inline ana.
 Extraction Inline fana_.
@@ -334,4 +334,5 @@ Extraction Inline QSort.p_split_.
 Extraction Inline QSort.p_omap.
 Extraction Inline QSort.f_app.
 Extraction Inline QSort.f_fun.
+Print QSort.
 Recursive Extraction QSort.
