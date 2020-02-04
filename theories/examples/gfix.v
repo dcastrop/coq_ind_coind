@@ -18,9 +18,9 @@ Section Definitions.
   Context (L : Type).
   Context (F : forall (t : Type),  Type).
   Context (OCC : forall (X : Type), X -> F X -> Prop).
-  Context (omap : forall (X Y : Type) p, (forall (x : X), OCC x p -> Y) -> F Y).
 
   Definition DOM X (y : F X) := {x : X | OCC x y}.
+  Context (omap : forall (X Y : Type) (p : F X), (DOM p -> Y) -> F Y).
 
   Create HintDb gfix.
   #[universes(template)] Inductive App X
@@ -30,8 +30,8 @@ Section Definitions.
          }.
   Hint Constructors App : gfix.
 
-  Definition mk_app (f : F L) : App L :=
-    {| shape := f; get := fun y => proj1_sig y |}.
+  Definition mk_app (f : F L) : App L := {| shape := f; get := sval |}.
+  Definition from_app A (f : App A) : F A := omap (get (a:=f)).
 
   Definition App_R X Y (r : X -> Y -> Prop) (f : App X) (g : App Y) :=
     shape f = shape g /\
@@ -171,8 +171,16 @@ Section Definitions.
     := fix f p FIN {struct FIN} :=
          g (fmap_dom (fun n => f (get n) (Fin_inv1 FIN n))).
 
+  Lemma tcata_unr_ A (g : App A -> A) x (FIN : Finite x) :
+    cata_ g FIN = g (fmap_dom (fun y => cata_ g (Fin_inv1 FIN y))).
+  Proof. by case: FIN. Qed.
+
   Definition tcata A (g : App A -> A) : LGFix -> A :=
     fun x => cata_ g (proj2_sig x).
+
+  Lemma tcata_unr A (g : App A -> A) (x : LGFix) :
+    tcata g =1 g \o fmap (tcata g) \o lg_out.
+  Proof. rewrite /tcata/==>p; apply/tcata_unr_. Qed.
 
   Definition gfix_to_lfix : LGFix -> LFix := tcata l_in.
   Definition lfix_to_gfix : LFix -> LGFix := cata lg_in.
