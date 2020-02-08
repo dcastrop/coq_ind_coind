@@ -1,80 +1,271 @@
 From mathcomp Require Import all_ssreflect.
 From Paco Require Import paco paco2.
+
+Require Import Eqdep_dec.
+
 Set Implicit Arguments.
 Unset Strict Implicit.
 Import Prenex Implicits.
 
-Reserved Notation "x '\pos' F"
-         (at level 70, no associativity,
-          format "'[hv' x '/ '  '\pos'  F ']'").
+(* Reserved Notation "x '\pos' F" *)
+(*          (at level 70, no associativity, *)
+(*           format "'[hv' x '/ '  '\pos'  F ']'"). *)
 Reserved Notation "x =l y" (at level 70, no associativity).
 Reserved Notation "x =g y" (at level 70, no associativity).
-Reserved Notation "x '=1[sval]' y" (at level 70, no associativity).
-Reserved Notation "x +> y"
-         (at level 90, no associativity).
+Reserved Notation "x =a/g y" (at level 70, no associativity).
+Reserved Notation "x '=1/g' y" (at level 70, no associativity).
+Reserved Notation "x '=1/a/g' y" (at level 70, no associativity).
+Reserved Notation "x '=1/sval' y" (at level 70, no associativity).
+(* Reserved Notation "x +> y" *)
+(*          (at level 90, no associativity). *)
 
+CoInductive vec (X : Type) : nat -> Type :=
+| vnil : vec X 0
+| vcons : X -> forall n, vec X n -> vec X n.+1.
+
+Lemma vcons_inj A (h1 h2 : A) n (t1 t2 : vec A n) :
+  vcons h1 t1 = vcons h2 t2 -> h1 = h2 /\ t1 = t2.
+Proof. move=>[]; eauto with *. Qed.
+
+Check list_ind.
+
+Lemma vec_ind (A : Type) (P : forall n, vec A n -> Prop)
+      (P_nil : P 0 (vnil A))
+      (P_cons : forall a n v, P n v -> P n.+1 (vcons a v))
+  : forall n v, P n v.
+Proof.
+  elim=>[|n Ih]; case E: _ / => [|h m t]//.
+  move: E t => [<- {m}] t.
+  by apply/P_cons/Ih.
+Qed.
+
+Lemma uvec X n (v : vec X n) : v = match v with
+                                   | vnil => vnil X
+                                   | vcons h _ t => vcons h t
+                                   end.
+Proof. by case: v. Qed.
+
+Definition vmap A B (f : A -> B) : forall n, vec A n -> vec B n :=
+  cofix vmap _ x :=
+    match x with
+    | vnil => vnil B
+    | vcons h _ t => vcons (f h) (vmap _ t)
+    end.
+
+Definition vmap_fold A (B : nat -> Type)
+           (g : A -> forall n, B n -> B n.+1) (z : B 0)
+  : forall n, vec A n -> B n
+  := fix f n v {struct n} :=
+       match v in vec _ n0 return n = n0 -> B n0 with
+       | vnil => fun=>z
+       | vcons h m t =>
+         match n return n = m.+1 -> B m.+1 with
+         | 0 => fun pf=>match pf with end
+         | n.+1 => fun pf=>match pf with | erefl => fun t=> g h _ (f _ t) end t
+         end
+       end erefl.
+
+Definition cvec_to_ivec A : forall n, vec A n -> Vector.t A n
+  := vmap_fold (Vector.cons A) (Vector.nil A).
+Fixpoint ivec_to_cvec A n (v : Vector.t A n)
+  := match v with
+     | Vector.nil => vnil A
+     | Vector.cons h n t => vcons h (ivec_to_cvec t)
+     end.
+
+Create HintDb gfix.
+
+Lemma vmap_nil A B (f : A -> B) : vmap f (vnil A) = vnil B.
+Proof. by rewrite (uvec (vmap _ _)). Qed.
+Hint Resolve vmap_nil : gfix.
+Hint Extern 1 =>
+match goal with
+| [ |- context[vmap _ (vnil _)] ] => rewrite vmap_nil
+end : gfix.
+
+Lemma vmap_cons A B (f : A -> B) (h : A) n (t : vec A n) :
+  vmap f (vcons h t) = vcons (f h) (vmap f t).
+Proof. by rewrite (uvec (vmap _ _)). Qed.
+Hint Resolve vmap_cons : gfix.
+Hint Extern 1 =>
+match goal with
+| [ |- context[vmap _ (vcons _ _)] ] => rewrite vmap_cons
+end : gfix.
+
+Lemma iso_ci_vec_l A n (v : Vector.t A n) : cvec_to_ivec (ivec_to_cvec v) = v.
+Proof. elim: v=>[|h m t Ih]/=; [|rewrite Ih]; by eauto with gfix. Qed.
+
+Lemma iso_ci_vec_r A n (v : vec A n) : ivec_to_cvec (cvec_to_ivec v) = v.
+Proof. elim: v=>[|h m t Ih]/=; [|rewrite Ih]; by eauto with gfix. Qed.
+
+Lemma vmap_imap A B (f : A -> B) n (v : Vector.t A n)
+  : vmap f (ivec_to_cvec v) = ivec_to_cvec (Vector.map f v).
+Proof. elim: v=>[|m h t Ih]/=; [|rewrite vmap_cons Ih]; by eauto with gfix. Qed.
+
+Lemma imap_vmap A B (f : A -> B) n (v : vec A n)
+  : Vector.map f (cvec_to_ivec v) = cvec_to_ivec (vmap f v).
+Proof. elim: v=>[|m h t Ih]/=; [|rewrite Ih]; by eauto with gfix. Qed.
+
+Lemma rw_comp A B C (f : A -> B) (g : B -> C) (h : A -> C) :
+  g \o f =1 h -> forall x, g (f x) = h x.
+Proof. by move=>H x; move: (H x)=>/=->. Qed.
 
 Section Definitions.
-  Context (L : Type).
-  Context (F : forall (t : Type),  Type).
-  Context (OCC : forall (X : Type), X -> F X -> Prop).
+  (****************************************************************************)
+  (** Assumptions and Strict positivisation of functors, using vectors as    **)
+  (** "functions with finite support"                                        **)
+  (****************************************************************************)
+  Parameter F : forall (t : Type),  Type.
+  Parameter occ : forall (X : Type), F X -> nat.
+  Definition OCC (V : Type -> nat -> Type) Y X (x : F Y) := V X (occ x).
+  Definition CApp X := {sh : F unit & OCC vec X sh}.
+  Coercion c_shape X (a : CApp X) : F unit := projT1 (P:=OCC vec X) a.
+  Coercion c_cont X  (a : CApp X) : OCC vec X (c_shape a)
+    := projT2 (P:=OCC vec X) a.
 
-  Definition DOM X (y : F X) := {x : X | OCC x y}.
-  Context (omap : forall (X Y : Type) (p : F X), (DOM p -> Y) -> F Y).
+  Definition IApp X := {sh : F unit & OCC Vector.t X sh}.
+  Coercion i_shape X (a : IApp X) : F unit := projT1 (P:=OCC Vector.t X) a.
+  Coercion i_cont X (a : IApp X) : OCC Vector.t X (i_shape a)
+    := projT2 (P:=OCC Vector.t X) a.
 
-  Create HintDb gfix.
-  #[universes(template)] Inductive App X
-    := App_C {
-           shape :> F L;
-           get : DOM shape -> X
-         }.
-  Hint Constructors App : gfix.
+  Parameter strict : forall X, F X -> IApp X.
+  Arguments strict [X] f_x.
 
-  Definition mk_app (f : F L) : App L := {| shape := f; get := sval |}.
-  Definition from_app A (f : App A) : F A := omap (get (a:=f)).
+  Parameter un_strict : forall X, IApp X -> F X.
+  Arguments un_strict [X] a_x.
 
-  Definition App_R X Y (r : X -> Y -> Prop) (f : App X) (g : App Y) :=
-    shape f = shape g /\
-    forall (o1 : DOM f) (o2 : DOM g), sval o1 = sval o2 -> r (get o1) (get o2).
-  Hint Unfold App_R : gfix.
+  Axiom un_strict_strict : forall X, un_strict (X:=X) \o strict (X:=X) =1 id.
+  Axiom strict_un_strict : forall X, strict (X:=X) \o un_strict (X:=X) =1 id.
+
+  Inductive CVec_All (A : Type) (P : A -> Prop)
+    : forall n, vec A n -> Prop :=
+  | vnil_a :
+      CVec_All P (vnil A)
+  | vcons_a n h t :
+      P h ->
+      CVec_All P t ->
+      CVec_All P (@vcons A h n t)
+  .
+  Hint Constructors CVec_All : gfix.
+
+  Lemma vec_0_is_nil_ T n (v : vec T n)
+    : match n return vec T n -> Prop with
+      | O => fun v => v = vnil T
+      | _ => fun _ => True
+      end v.
+  Proof. by case: v. Qed.
+
+  Lemma vec_0_nil T (v : vec T 0) : v = vnil T.
+  Proof. by apply/(vec_0_is_nil_ v). Qed.
+
+  Derive Dependent Inversion cvec_all_inv
+    with (forall A (P : A -> Prop) n (v : vec A n), CVec_All P v) Sort Prop.
+
+  (* Definition vec_all_cons (A : Type) (P : A -> Prop) h n (v : vec A n) *)
+  (*       (x : CVec_All P (vcons h v)) : P h /\ CVec_All P v := *)
+
+  Inductive CVec_R (A B : Type) (P : A -> B -> Prop)
+    : forall n m, vec A n -> vec B m -> Prop :=
+  | vnil_r :
+      CVec_R P (vnil A) (vnil B)
+  | vcons_r n m h1 h2 t1 t2 :
+      P h1 h2 ->
+      CVec_R P t1 t2 ->
+      CVec_R P (@vcons A h1 n t1) (@vcons B h2 m t2)
+  .
+  Hint Constructors CVec_R : gfix.
+
+  Derive Dependent Inversion cvec_r_inv
+    with (forall (A B : Type) (P : A -> B -> Prop)
+                 n m (v1 : vec A n) (v2 : vec B m), CVec_R P v1 v2)
+         Sort Prop.
+
+  Lemma cvec_r_refl (A : Type) n (v : vec A n) : CVec_R eq v v.
+  Proof. by elim: v =>[|h m t IH]; eauto with gfix. Qed.
+
+  Lemma vec_nil_cons A B (P : A -> B -> Prop) n (v : vec A n) h
+    : ~ CVec_R P (vcons h v) (vnil B).
+  Proof. by elim/cvec_r_inv. Qed.
+
+  Definition IVec_R (A B : Type) (P : A -> B -> Prop)
+    : forall n m (v1 : Vector.t A n) (v2 : Vector.t B m), Prop
+    :=  fix f n m v1 v2 {struct v1}
+          := match v1, v2 with
+             | Vector.nil, Vector.nil => True
+             | Vector.cons h1 n1 t1, Vector.cons h2 n2 t2
+               => P h1 h2 /\ f _ _ t1 t2
+             | _, _ => False
+             end.
+  (* Hint Constructors IVec_R : gfix. *)
+
+  Definition IApp_R X Y (r : X -> Y -> Prop) (f : IApp X) (g : IApp Y) :=
+    i_shape f = i_shape g /\ IVec_R r (i_cont f) (i_cont g).
+  Hint Unfold IApp_R : gfix.
   Hint Extern 1 =>
   match goal with
-  | [ |- context[App_R] ] => rewrite /App_R/=
+  | [ |- context[IApp_R] ] => rewrite /IApp_R/=
   end : gfix.
 
-  Lemma App_R_mon X Y (x : App X) (y : App Y) (r r' : X -> Y -> Prop) :
-    App_R r x y -> (forall ex ey, r ex ey -> r' ex ey) -> App_R r' x y.
-  Proof. case: x; case: y=>/= sx fx sy fy []; eauto with gfix. Qed.
-  Hint Resolve App_R_mon : gfix.
+  Definition CApp_R X Y (r : X -> Y -> Prop) (f : CApp X) (g : CApp Y) :=
+    c_shape f = c_shape g /\ CVec_R r (c_cont f) (c_cont g).
+  Hint Unfold CApp_R : gfix.
+  Hint Extern 1 =>
+  match goal with
+  | [ |- context[CApp_R] ] => rewrite /CApp_R/=
+  end : gfix.
 
-  Definition fmap_dom X Y (x : App X) (f : DOM x -> Y) : App Y := App_C f.
+  Lemma IApp_R_mon X Y (x : IApp X) (y : IApp Y) (r r' : X -> Y -> Prop) :
+    IApp_R r x y -> (forall ex ey, r ex ey -> r' ex ey) -> IApp_R r' x y.
+  Proof.
+    rewrite /IApp_R/i_cont/shape/==>[[E_sh E_cn] H]; split=>//.
+    move: (projT2 x) (projT2 y) E_cn; rewrite /OCC.
+    move: (occ _) (occ _)=> n2 n1 v1 v2.
+    by elim: v1 n2 v2=>[|h1 m1 t1 Ih] n2; case=>[|h2 m2 t2]/= []; eauto with gfix.
+  Qed.
+  Hint Resolve IApp_R_mon : gfix.
 
-  Definition fmap X Y (f : X -> Y) (x : App X) : App Y
-    := App_C (f \o get (a:=x)).
+  Lemma CApp_R_mon X Y (x : CApp X) (y : CApp Y) (r r' : X -> Y -> Prop) :
+    CApp_R r x y -> (forall ex ey, r ex ey -> r' ex ey) -> CApp_R r' x y.
+  Proof.
+    rewrite /CApp_R/c_cont/shape/==>[[E_sh E_cn] H]; split=>//.
+    move: (projT2 x) (projT2 y) E_cn; rewrite /OCC.
+    move: (occ _) (occ _)=> n2 n1 v1 v2.
+    by elim; eauto with gfix.
+  Qed.
+  Hint Resolve CApp_R_mon : gfix.
 
-  Lemma fmap_id X : fmap id =1 id :> (App X -> App X).
-  Proof. case; by eauto. Qed.
+  Definition i_fmap X Y (f : X -> Y) (x : IApp X) : IApp Y
+    := existT _ _ (Vector.map f (i_cont x)).
+  Hint Unfold i_fmap : gfix.
 
-  Lemma fmap_comp X Y Z (f : X -> Y) (g : Y -> Z)
-    : fmap g \o fmap f =1 fmap (g \o f).
-  Proof. by move=>[p k]. Qed.
+  Definition c_fmap X Y (f : X -> Y) (x : CApp X) : CApp Y
+    := existT _ _ (vmap f (c_cont x)).
+  Hint Unfold c_fmap : gfix.
 
-  CoInductive GFix : Type := G_in { g_out : App GFix }.
+  Lemma fmapI X n : vmap (A:=X) (n:=n) id =1 id.
+  Proof. by elim=>[|h t v Ih]; eauto with gfix; rewrite vmap_cons Ih. Qed.
+
+  Lemma fmap_comp X Y Z (f : X -> Y) (g : Y -> Z) n
+    : Vector.map (n:=n) g \o Vector.map (n:=n) f =1 Vector.map (n:=n) (g \o f).
+  Proof. by elim=>[|h t v Ih]//=; rewrite -Ih. Qed.
+
+  (****************************************************************************)
+  (** Greatest fixpoints                                                     **)
+  (****************************************************************************)
+
+  CoInductive GFix : Type := G_in {g_out : CApp GFix}.
   Hint Constructors GFix : gfix.
 
-  Notation "'g_in'" := G_in (at level 0).
+  Notation "'g_in'" := (G_in).
 
-  Lemma g_in_out : id =1 g_in \o g_out.
+  Lemma g_in_out : g_in \o g_out =1 id.
   Proof. by case. Qed.
 
-  Lemma g_out_in : id =1 g_out \o g_in.
+  Lemma g_out_in : g_out \o g_in =1 id.
   Proof. by []. Qed.
 
-  (* Could generalize to [GFix T -> GFix T' -> Prop], but would require an
-   * extra relation to "zip" elements of [F]
-   *)
   Definition GFix_EQ_ (r : GFix -> GFix -> Prop) (gl gr : GFix) : Prop :=
-    App_R r (g_out gl) (g_out gr).
+    CApp_R r (g_out gl) (g_out gr).
   Definition GFix_EQ x y := paco2 GFix_EQ_ bot2 x y.
   Hint Unfold GFix_EQ : gfix.
   Hint Unfold GFix_EQ_ : gfix.
@@ -87,129 +278,275 @@ Section Definitions.
   | [ |- context [GFix_EQ_ _ _ _]] => rewrite /GFix_EQ_/=
   end : gfix.
 
-  Notation "x =g y" := (GFix_EQ x y) : type_scope.
-
   Lemma GFix_EQ_mon : monotone2 GFix_EQ_.
   Proof. eauto with gfix. Qed.
   Hint Resolve GFix_EQ_mon : gfix.
 
-  Definition ana A (h : A -> App A) : A -> GFix
-    := cofix f := g_in \o fmap f \o h.
+  Notation "x =g y" := (GFix_EQ x y) : type_scope.
+  Notation "x =a/g y" := (CApp_R GFix_EQ x y) : type_scope.
 
-  Lemma ana_eq A (h : A -> App A) :
-    g_out \o ana h =1 fmap (ana h) \o h.
+  Lemma gfix_refl r x : paco2 GFix_EQ_ r x x.
+  Proof.
+    move: x {-1 3}x (erefl x); apply/paco2_acc=> r0 _ CIH.
+    move=> x0 x -> {x0}; move: CIH=>/(_ _ _ erefl)-CIH.
+    apply/paco2_fold; case: x => a_x; constructor=>//=.
+    move: (c_cont a_x); rewrite /OCC; move: (occ a_x)=>n.
+    by elim=>[|h m t Ih]; eauto with gfix.
+  Qed.
+
+  Lemma gfix_sym r x y : paco2 GFix_EQ_ r x y -> paco2 GFix_EQ_ r y x.
+  Admitted.
+
+  Lemma gfix_trans r x y z :
+    paco2 GFix_EQ_ r x y ->
+    paco2 GFix_EQ_ r y z ->
+    paco2 GFix_EQ_ r x z.
+  Admitted.
+
+  Notation "f =1/g g" := (forall x, f x =g g x) : type_scope.
+  Notation "f =1/a/g g" := (forall x, f x =a/g g x) : type_scope.
+
+  Lemma eq_g_in A (f g : A -> CApp GFix)
+    : f =1/a/g g -> g_in \o f =1/g g_in \o g.
+  Proof.
+    move=> H x/=.
+    apply/paco2_fold; rewrite /GFix_EQ_/=.
+    apply/(CApp_R_mon (r:=GFix_EQ)); first by apply/H.
+    by move=> ex ey E; left.
+  Qed.
+
+  Lemma eq_g_out A (f g : A -> GFix)
+    : f =1/g g -> g_out \o f =1/a/g g_out \o g.
+  Proof.
+    move=> H x/=; move: (f x) (g x) (H x) => {H x f g}.
+    case=>af; case=>ag/= /(paco2_unfold GFix_EQ_mon)-[/= H0 H1].
+    constructor=>//; move: H1; elim; eauto with gfix.
+    by move=> n m h1 h2 t1 t2 [E1 _ E2|//]; constructor.
+  Qed.
+
+  Lemma eq_gfix A (f g : A -> GFix) : f =1 g -> f =1/g g.
+  Proof. by move=> H x; rewrite H; apply/gfix_refl. Qed.
+
+  Definition ana A (h : A -> CApp A) : A -> GFix
+    := cofix f := g_in \o c_fmap f \o h.
+
+  Lemma ana_eq A (h : A -> CApp A) :
+    g_out \o ana h =1 c_fmap (ana h) \o h.
   Proof. by []. Qed.
 
-  Corollary ana_unroll A (h : A -> App A) :
-    ana h =1 g_in \o fmap (ana h) \o h.
-  Proof. move=>x; by rewrite (g_in_out (ana h x)). Qed.
+  Corollary ana_unroll A (h : A -> CApp A) :
+    ana h =1 g_in \o c_fmap (ana h) \o h.
+  Proof. by move=>x; rewrite /= (rw_comp (g_in_out) (ana _ _)). Qed.
 
-  Inductive LFix : Type := L_in { l_out : App LFix }.
+  Lemma ana_univ_r A (h : A -> CApp A) (f : A -> GFix)
+    : g_out \o f =1/a/g c_fmap f \o h -> f =1/g ana h.
+  Proof.
+    move=> H x.
+    move: {-2}(f x) (erefl (f x)) {-2}(ana h x) (erefl (ana h x))=> fx Ef ax Ea.
+    set P_CIH := fun x => fx = f x /\ ax = ana h x.
+    move: (ex_intro P_CIH x (conj Ef Ea)) => {x Ef Ea}.
+    rewrite /P_CIH {P_CIH}; move: fx ax; apply/paco2_acc=>r _ CIH.
+    move=> x0 x1 [x] [->->] {x0 x1}.
+    move: CIH=> /(_ _ _ (ex_intro _ _ (conj _ _))).
+    move=>/(_ _ _ _ erefl erefl)-CIH.
+
+    have {H}H: f =1/g g_in \o c_fmap f \o h
+      by move: H=>/eq_g_in-H y; move: (H y)=>/=; rewrite (rw_comp g_in_out).
+
+    move:(paco2_mon r (H x))=>/(_ (fun x y z => False_rect _ z))-H'.
+    apply/(gfix_trans H'); rewrite ana_unroll /GFix_EQ_/==>{H' H}.
+    apply/paco2_fold; constructor=>//=.
+    move: (h x) => [shape]; rewrite /OCC/=; move: (occ shape)=>n {shape x}.
+    elim=>[|x m xs Ih]; rewrite ?vmap_nil ?vmap_cons; constructor=>//; right.
+    by apply: CIH.
+  Qed.
+
+  Lemma ana_univ_l A (h : A -> CApp A) (f : A -> GFix)
+    : f =1/g ana h -> g_out \o f =1/a/g c_fmap f \o h.
+  Proof.
+  Admitted.
+
+  Lemma ana_univ A (h : A -> CApp A) (f : A -> GFix)
+    : f =1/g ana h <-> g_out \o f =1/a/g c_fmap f \o h.
+  Proof. by split; [apply/ana_univ_l|apply/ana_univ_r]. Qed.
+
+  (****************************************************************************)
+  (** Least fixpoints                                                        **)
+  (****************************************************************************)
+
+  Inductive LFix : Type := L_in {l_out : IApp LFix}.
   Hint Constructors LFix : gfix.
 
-  Notation "'l_in'" := L_in (at level 0).
+  Notation "'l_in'" := (L_in).
 
-  Lemma l_in_out : id =1 l_in \o l_out.
+  Lemma l_in_out : l_in \o l_out =1 id.
   Proof. by case. Qed.
 
-  Lemma l_out_in : id =1 l_out \o l_in.
+  Lemma l_out_in : l_out \o l_in =1 id.
   Proof. by []. Qed.
 
-  Fixpoint LFix_EQ (l r : LFix) : Prop := App_R LFix_EQ (l_out l) (l_out r).
+  Fixpoint LFix_EQ (gl gr : LFix) {struct gl} : Prop :=
+    IApp_R LFix_EQ (l_out gl) (l_out gr).
 
   Notation "x =l y" := (LFix_EQ x y) : type_scope.
 
-  Definition cata A (h : App A -> A) : LFix -> A
-    := fix f x := (h \o (fmap f) \o l_out) x.
+  Definition cata A (g : IApp A -> A) : LFix -> A
+    := fix f x := (g \o i_fmap f \o l_out) x.
 
-  Lemma cata_eq A (h : App A -> A) :
-    cata h \o l_in =1 h \o fmap (cata h).
+  Lemma cata_eq A (g : IApp A -> A) :
+    cata g \o l_in =1 g \o i_fmap (cata g).
   Proof. by []. Qed.
 
-  Corollary cata_unroll A (h : App A -> A) :
-    cata h =1 h \o fmap (cata h) \o l_out.
-  Proof. move=>x; by rewrite (l_in_out x). Qed.
+  Corollary cata_unroll A (g : IApp A -> A) :
+    cata g =1 g \o i_fmap (cata g) \o l_out.
+  Proof. by move=>x; rewrite -(rw_comp (l_in_out) x)/=. Qed.
 
-  Inductive Finite : GFix -> Prop :=
-  | Fin_fold (x : App GFix) :
-      (forall (y : DOM x), Finite (get y)) -> Finite (g_in x).
+  Lemma cata_univ A (g : IApp A -> A) :
+    forall (f : LFix -> A), cata g =1 f <-> f \o l_in =1 g \o i_fmap f.
+  Admitted.
 
-  Lemma Fin_inv1 (p : GFix) :
-    Finite p -> forall (x : DOM (g_out p)), Finite (get x).
-  Proof. by move=>[]. Defined.
+  (****************************************************************************)
+  (** "Finite greatest fixpoints"                                            **)
+  (****************************************************************************)
 
-  Definition LGFix := { p : GFix | Finite p }.
+  Inductive VAll A (P : A -> Prop) : forall n (v : vec A n), Prop :=
+  | P_nil : VAll P (vnil A)
+  | P_cons h n (v : vec A n) : P h -> VAll P v -> VAll P (vcons h v)
+  .
+  Hint Constructors VAll : gfix.
 
-  Definition E_LGFix (s1 s2 : LGFix) := sval s1 =g sval s2.
+  Derive Dependent Inversion VAll_inv
+    with (forall A (P : A -> Prop) n (v : vec A n), VAll P v)
+         Sort Prop.
 
-  Definition lg_forget : App LGFix -> App GFix := fmap (@sval GFix Finite).
+  Inductive Fin : GFix -> Prop :=
+  | Fin_fold (x : CApp GFix) : VAll Fin (c_cont x) -> Fin (g_in x)
+  .
 
-  Definition lg_fin (x : App LGFix) (y : DOM x)
-    : Finite (sval (get y)) := @proj2_sig GFix Finite (get y).
+  Lemma Fin_inv1 p (F : Fin p) : VAll Fin (c_cont (g_out p)).
+  Proof. by case: F=>/=. Defined.
 
-  Definition lg_in (x : App LGFix) : LGFix :=
-    exist _ _ (@Fin_fold (fmap sval x) (lg_fin (x:=x))).
+  Lemma nat_dec : forall x y : nat, {x = y} + {x <> y}.
+  Proof. by decide equality. Qed.
 
-  Definition lg_out_ (x : LGFix) (n : DOM (g_out (sval x))) :=
-    exist [eta Finite] (get n) (Fin_inv1 (proj2_sig x) n).
-
-  (* Try remove fun here? *)
-  Definition lg_out (x : LGFix) : App LGFix := fmap_dom (lg_out_ (x:=x)).
-
-  Notation "f =1[sval] g" := (forall x, sval (f x) = sval (g x)).
-
-  Lemma lg_in_out : lg_in \o lg_out =1[sval] id.
-  Proof. by case; case; case. Qed.
-
-  Lemma lg_out_in : lg_out \o lg_in =1 id.
+  Lemma VAll_inv1 A (P : A -> Prop)  n (v : vec A n) h r (v0 : vec A r)
+    : VAll P v -> existT _ _ v = existT _ _ (vcons h v0) -> P h.
   Proof.
-    move=> x; rewrite /lg_in/lg_out/comp/fmap_dom/lg_fin/lg_out_//=.
-    (* Here I do need extensional equality, unfortunately *)
-  Abort.
+    case=>// h0 n0 v1 P_h0 P_v1 [E_n0 E_h0 _].
+    by move: E_n0 E_h0 v1 P_v1 P_h0 =>->->.
+  Defined.
 
-  Definition cata_ A (g : App A -> A) : forall p, Finite p -> A
-    := fix f p FIN {struct FIN} :=
-         g (fmap_dom (fun n => f (get n) (Fin_inv1 FIN n))).
+  Lemma VAll_inv2 A (P : A -> Prop)  n (v : vec A n) h r (v0 : vec A r)
+    : VAll P v -> existT _ _ v = existT _ _ (vcons h v0) -> VAll P v0.
+  Proof.
+    case=>// h0 n0 v1 P_h0 P_v1 [E_n0 E_h0 _].
+    move: E_n0 E_h0 v1 P_v1 P_h0 =>->-> v1 P_v1 P_h.
+    by move=>/(inj_pair2_eq_dec nat nat_dec _ _ _ _)<-.
+  Defined.
 
-  Lemma tcata_unr_ A (g : App A -> A) x (FIN : Finite x) :
-    cata_ g FIN = g (fmap_dom (fun y => cata_ g (Fin_inv1 FIN y))).
-  Proof. by case: FIN. Qed.
+  Definition Fix := sig Fin.
+  Definition App A (P : A -> Prop) := {x : CApp A | VAll P (c_cont x) }.
 
-  Definition tcata A (g : App A -> A) : LGFix -> A :=
-    fun x => cata_ g (proj2_sig x).
+  Definition f_in (x : App Fin) : Fix := exist _ _ (Fin_fold (projT2 x)).
+  Definition f_out (x : Fix) : App Fin :=
+    exist _ (g_out (sval x)) (Fin_inv1 (proj2_sig x)).
 
-  Lemma tcata_unr A (g : App A -> A) (x : LGFix) :
-    tcata g =1 g \o fmap (tcata g) \o lg_out.
-  Proof. rewrite /tcata/==>p; apply/tcata_unr_. Qed.
+  Definition fmap_ A B (P : A -> Prop)
+             (f : sig P -> B)
+    : forall n (x : vec A n), VAll P x -> vec B n
+    := cofix m n (v : vec A n) (H : VAll P v)  :=
+         match v as v0 in vec _ m
+               return existT _  _ v = existT _ _ v0 -> vec B m
+         with
+         | vnil => fun => vnil B
+         | vcons h r t =>
+           fun E => vcons (f (exist _ _ (VAll_inv1 H E))) (m r t (VAll_inv2 H E))
+         end erefl.
 
-  Definition gfix_to_lfix : LGFix -> LFix := tcata l_in.
-  Definition lfix_to_gfix : LFix -> LGFix := cata lg_in.
+  Definition fmap A B (P : A -> Prop) (Q : B -> Prop)
+             (f : forall x, P x -> sig Q)
+    : forall n (x : vec A n), VAll P x -> { v : vec B n | VAll Q v }
+    := fix m n (v : vec A n) (H : VAll P v) {struct H} :=
+         match v as v0 in vec _ m
+               return existT _  _ v = existT _ _ v0 ->
+                      { v : vec B m | VAll Q v }
+         with
+         | vnil => fun => exist _ _ (P_nil Q)
+         | vcons h r t =>
+           fun E =>
+             exist _ _ (P_cons (proj2_sig (f h (VAll_inv1 H E)))
+                               (proj2_sig (m r t (VAll_inv2 H E))))
+         end erefl.
 
-  Lemma Fin_inv2 A (g : A -> App A) (a : A) :
-    Finite (ana g a) -> forall (o : DOM (g a)), Finite (ana g (get o)).
-  Proof. rewrite ana_unroll; apply/Fin_inv1. Defined.
+  Definition f_map_ A B (P : A -> Prop)
+             (f : sig P -> B) (x : App P) : CApp B
+    := existT _ (c_shape (sval x)) (fmap_ f (proj2_sig x)).
 
-  Definition fana_ A (h : A -> App A) : forall x, Finite (ana h x) -> LFix
-    := fix f x F := l_in (fmap_dom (fun y => f (get y) (Fin_inv2 F y))).
+  Definition f_map A B (P : A -> Prop) (Q : B -> Prop)
+             (f : forall x, P x -> sig Q) (x : App P) : App Q
+    := exist _ (existT _ (c_shape (sval x)) _) (projT2 (fmap f (proj2_sig x))).
 
-  (* Terminating functions *)
-  Notation "A +> B" := {h : A -> B | forall x, Finite (ana h x)}.
+  Definition f_cata A (P : A -> Prop) (g : App P -> sig P) (x : Fix) : sig P
+    := (fix f p (FIN : Fin p) {struct FIN} : sig P
+         := (g \o f_map f \o f_out) (exist Fin p FIN)) _ (proj2_sig x).
+
+  (* Potentially infinite *)
+  Definition f_ana_ A (P : A -> Prop) (g : sig P -> App P) : sig P -> GFix
+    := cofix f := g_in \o f_map_ f \o g.
+
+  (* Finiteness: *)
+  Definition f_ana A (P : A -> Prop) (g : sig P -> App P)
+             (H : forall (x : sig P), Fin (f_ana_ g x))
+             (x : sig P) : Fix := exist _ _ (H x).
+  (* Redo with "finite anamorphisms", and without the properties *)
+
+  Definition f_cata A (P : A -> Prop) (g : App P -> sig P) (x : Fix) : sig P
+    := (fix f p (FIN : Fin p) {struct FIN} : sig P
+         := (g \o f_map f \o f_out) (exist Fin p FIN)) _ (proj2_sig x).
+
+  Notation "f =1/sval g" := (forall x, sval (f x) = sval (g x)).
+
+  Lemma f_in_out : f_in \o f_out =1/sval id.
+  Proof. by case; case. Qed.
+
+  Lemma f_out_in : f_out \o f_in =1/sval id.
+  Proof. by []. Qed.
+
+  (* TODO *)
+  (* Definition gfix_to_lfix : Fix -> LFix := f_cata l_in. *)
+  (* Definition lfix_to_gfix : LFix -> Fix := cata lg_in. *)
 
   Definition fin_ana A (h : A +> App A) : A -> LFix :=
     fun x => fana_ (proj2_sig h x).
 
-  Definition t_ana A (h : A +> App A) : A -> LGFix :=
+  Definition t_ana A (h : A +> App A) : A -> Fix :=
     fun x => exist _ _ (proj2_sig h x).
 
-  Definition fin_hylo A B (g : App B -> B) (h : A -> App A)
-    : forall (x : A) (F : Finite (ana h x)), B
+  Definition fin_hylo_ A B (g : App B -> B) (h : A -> App A)
+    : forall (x : A) (F : Fin (ana h x)), B
     := fix f x F := g (fmap_dom (fun y => f (get y) (Fin_inv2 F y))).
+
+  Definition fin_hylo A B (g : App B -> B) (h : A -> App A)
+    : forall (x : A) (F : Fin (ana h x)), B
+    := fix f x F := g (fmap_dom (fun y => f (get y) (Fin_inv2 F y))).
+
+  Goal forall A B (g : App B -> B) (h : A -> App A) (x : A) (FIN : Fin (ana h x)),
+      fin_hylo g FIN = g (fmap_dom (fun y => fin_hylo g (Fin_inv2 FIN y))).
+    move=> A B g h x.
+    move=> A B g h x.
+    move: (ana h x)
 
   Definition fhylo A B (g : App B -> B) (h : A +> App A)
     : A -> B := fun x => fin_hylo g (proj2_sig h x).
+
+  Goal forall A B (g : App B -> B) (h : A +> App A),
+      fhylo g h =1 g \o fmap (fhylo g h) \o sval h.
+  Proof.
+    move=>A B g [h FIN]/=; rewrite /fhylo/==>x/=.
+    case: (FIN x).
 End Definitions.
 
-Notation "A +> B" := {h : A -> B | forall x, Finite (ana h x)}.
+Notation "A +> B" := {h : A -> B | forall x, Fin (ana h x)}.
 Notation "x =l y" := (LFix_EQ x y) : type_scope.
 Notation "'l_in'" := L_in (at level 0).
 Notation "x =g y" := (GFix_EQ x y) : type_scope.
@@ -302,7 +639,7 @@ Module QSort.
     end.
   Definition p_merge A := p_merge_ \o @f_fun A nat (seq nat).
 
-  Lemma p_split_terminates (l : list nat) : Finite (ana p_split_ l).
+  Lemma p_split_terminates (l : list nat) : Fin (ana p_split_ l).
   Proof.
     move: {-1}(size l) (leqnn (size l)) => n LE; move: l LE.
     elim: n=>[|n Ih];case=>[|h t]/= LE; rewrite ana_unroll//; constructor=>[[//=]].
