@@ -498,6 +498,14 @@ Section Definitions.
   Definition f_ana A (P : A -> Prop) (g : sig P -> App P)
              (H : forall (x : sig P), Fin (f_ana_ g x))
              (x : sig P) : Fix := exist _ _ (H x).
+
+  Definition f_hylo B A (P : B -> Prop) (Q : A -> Prop)
+             (g : App P -> sig P) (h : sig Q -> App Q)
+             (x : sig Q) (H : forall (x : sig Q), Fin (f_ana_ h x)) : sig P
+    := (fix f x (FIN : Fin (f_ana_ h x)) {struct FIN} : sig P
+         := (g \o f_map f \o h)) x H.
+
+
   (* Redo with "finite anamorphisms", and without the properties *)
 
   Definition f_cata A (P : A -> Prop) (g : App P -> sig P) (x : Fix) : sig P
