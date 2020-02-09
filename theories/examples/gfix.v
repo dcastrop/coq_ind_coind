@@ -499,6 +499,28 @@ Section Definitions.
              (H : forall (x : sig P), Fin (f_ana_ g x))
              (x : sig P) : Fix := exist _ _ (H x).
 
+  Definition f_hylo_comp B A (P : B -> Prop) (Q : A -> Prop)
+             (g : App P -> sig P) (h : sig Q -> App Q)
+             (H : forall (x : sig Q), Fin (f_ana_ h x)) : sig Q -> sig P
+    := f_cata g \o f_ana H.
+
+  Definition FIN_ANA A (P : A -> Prop) (h : sig P -> App P)
+    := (fun (x : A) => sig (fun (H : P x) => Fin (f_ana_ h (exist _ _ H)))).
+
+  Definition forget_fin A (P : A -> Prop) (h : sig P -> App P)
+             (x : sig (FIN_ANA h)) : sig P
+    := exist _ (sval x) (sval (proj2_sig x)).
+
+  Definition wrap_fin A (Q : A -> Prop) (h : sig Q -> App Q)
+             (x : sig (FIN_ANA h)) : App (FIN_ANA h) :=
+    exist (fun x => VAll (FIN_ANA h) (c_cont x)) (sval (h (forget_fin x))) (Fin_inv1 (proj2_sig (proj2_sig x))).
+
+  Definition f_hylo B A (P : B -> Prop) (Q : A -> Prop)
+             (g : App P -> sig P) (h : sig Q -> App Q)
+             (x : sig Q) (H : Fin (f_ana_ h x)) : sig P
+    := (fix f (x : sig Q) (FIN : Fin (f_ana_ h x)) {struct FIN} : sig P
+         := (g \o f_map f \o h) (exist Fin x FIN)) _ H.
+
   Definition f_hylo B A (P : B -> Prop) (Q : A -> Prop)
              (g : App P -> sig P) (h : sig Q -> App Q)
              (x : sig Q) (H : forall (x : sig Q), Fin (f_ana_ h x)) : sig P
