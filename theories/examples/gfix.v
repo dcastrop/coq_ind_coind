@@ -128,6 +128,17 @@ Section Definitions.
   Coercion i_cont X (a : IApp X) : OCC Vector.t X (i_shape a)
     := projT2 (P:=OCC Vector.t X) a.
 
+  Definition to_capp A (v : IApp A) : CApp A :=
+    existT _ (i_shape v) (ivec_to_cvec (i_cont v)).
+  Definition to_iapp A (v : CApp A) : IApp A :=
+    existT _ (c_shape v) (cvec_to_ivec (c_cont v)).
+
+  Lemma to_capp_iapp A : to_capp (A:= A) \o to_iapp (A := A) =1 id.
+  Proof. by case=>sh cn; rewrite /to_capp/to_iapp/= iso_ci_vec_r. Qed.
+
+  Lemma to_iapp_capp A : to_iapp (A:= A) \o to_capp (A := A) =1 id.
+  Proof. by case=>sh cn; rewrite /to_capp/to_iapp/= iso_ci_vec_l. Qed.
+
   Parameter strict : forall X, F X -> IApp X.
   Arguments strict [X] f_x.
 
@@ -409,59 +420,153 @@ Section Definitions.
   (** "Finite greatest fixpoints"                                            **)
   (****************************************************************************)
 
-  Inductive VAll A (P : A -> Prop) : forall n (v : vec A n), Prop :=
-  | P_nil : VAll P (vnil A)
-  | P_cons h n (v : vec A n) : P h -> VAll P v -> VAll P (vcons h v)
-  .
-  Hint Constructors VAll : gfix.
+  Lemma nat_dec : forall x y : nat, {x = y} + {x <> y}.
+  Proof. by decide equality. Defined.
 
-  Derive Dependent Inversion VAll_inv
-    with (forall A (P : A -> Prop) n (v : vec A n), VAll P v)
-         Sort Prop.
+  Definition Member A (x : A) : forall n : nat, vec A n -> Prop
+    := vmap_fold (B:=fun=>Prop) (fun h _ p => x = h \/ p) False.
+
+  Lemma member_vmap A B (y : A) (f : A -> B) n (v : vec A n)
+    : Member y v -> Member (f y) (vmap f v).
+  Proof. elim: v=>[|h m t Ih]//= [->|/Ih-H]; first (by left); by right. Qed.
+
+  Definition vec_le A n m (v : vec A n) (v' : vec A m)
+    := forall (y : A), Member y v -> Member y v'.
+
+  Lemma member_refl A n (v : vec A n) : vec_le v v.
+  Proof. by []. Qed.
+  Arguments member_refl [A n] v.
+
+  Definition VAll A P n (v : vec A n) := forall y, Member y v -> P y.
+
+  Lemma vec_le_hd A n (v : vec A n) (h : A) m (t : vec A m) :
+    vec_le (vcons h t) v -> Member h v.
+  Proof. by move=>/(_ h (or_introl erefl)). Qed.
+
+  Lemma vec_le_tl A n (v : vec A n) (h : A) m (t : vec A m) :
+    vec_le (vcons h t) v -> vec_le t v.
+  Proof. by move=>H x M; apply/H/or_intror/M. Qed.
+
+  Lemma vall_tl A (P : A -> Prop) n (v : vec A n) (h : A) m (t : vec A m) :
+    VAll P v -> vec_le (vcons h t) v -> VAll P t.
+  Proof. by move=> H1 H2 y M; apply/H1/H2; right. Defined.
+
+  Lemma vall_hd A (P : A -> Prop) n (v : vec A n) (h : A) m (t : vec A m) :
+    VAll P v -> vec_le (vcons h t) v -> P h.
+  Proof. by move=> H1 H2; apply/H1/H2; left. Defined.
 
   Inductive Fin : GFix -> Prop :=
-  | Fin_fold (x : CApp GFix) : VAll Fin (c_cont x) -> Fin (g_in x)
-  .
+  | Fin_fold x : VAll Fin (c_cont x) -> Fin (g_in x).
 
-  Lemma Fin_inv1 p (F : Fin p) : VAll Fin (c_cont (g_out p)).
-  Proof. by case: F=>/=. Defined.
+  Lemma Fin_inv1 p : Fin p -> VAll Fin (c_cont (g_out p)).
+  Proof. rewrite /VAll; by case. Defined.
 
-  Lemma nat_dec : forall x y : nat, {x = y} + {x <> y}.
-  Proof. by decide equality. Qed.
+  Definition App A (P : A -> Prop)
+    := {x : CApp A | forall y, Member y (c_cont x) -> P y}.
 
-  Lemma VAll_inv1 A (P : A -> Prop)  n (v : vec A n) h r (v0 : vec A r)
-    : VAll P v -> existT _ _ v = existT _ _ (vcons h v0) -> P h.
-  Proof.
-    case=>// h0 n0 v1 P_h0 P_v1 [E_n0 E_h0 _].
-    by move: E_n0 E_h0 v1 P_v1 P_h0 =>->->.
-  Defined.
-
-  Lemma VAll_inv2 A (P : A -> Prop)  n (v : vec A n) h r (v0 : vec A r)
-    : VAll P v -> existT _ _ v = existT _ _ (vcons h v0) -> VAll P v0.
-  Proof.
-    case=>// h0 n0 v1 P_h0 P_v1 [E_n0 E_h0 _].
-    move: E_n0 E_h0 v1 P_v1 P_h0 =>->-> v1 P_v1 P_h.
-    by move=>/(inj_pair2_eq_dec nat nat_dec _ _ _ _)<-.
-  Defined.
-
-  Definition Fix := sig Fin.
-  Definition App A (P : A -> Prop) := {x : CApp A | VAll P (c_cont x) }.
-
-  Definition f_in (x : App Fin) : Fix := exist _ _ (Fin_fold (projT2 x)).
-  Definition f_out (x : Fix) : App Fin :=
-    exist _ (g_out (sval x)) (Fin_inv1 (proj2_sig x)).
+  Definition vecP A (P : A -> Prop) n
+    := {x : vec A n | forall y, Member y x -> P y}.
 
   Definition fmap_ A B (P : A -> Prop)
-             (f : sig P -> B)
-    : forall n (x : vec A n), VAll P x -> vec B n
-    := cofix m n (v : vec A n) (H : VAll P v)  :=
-         match v as v0 in vec _ m
-               return existT _  _ v = existT _ _ v0 -> vec B m
-         with
-         | vnil => fun => vnil B
-         | vcons h r t =>
-           fun E => vcons (f (exist _ _ (VAll_inv1 H E))) (m r t (VAll_inv2 H E))
-         end erefl.
+             (f : forall x, P x -> B) n (v : vec A n) (H : VAll P v) : vec B n
+    := (cofix m n (v' : vec A n) (M : vec_le v' v) :=
+            match v' in vec _ m return vec_le v' v -> vec B m with
+            | vnil => fun=> vnil B
+            | vcons h _ t =>
+              fun M => vcons (f h (H _ (vec_le_hd M))) (m _ t (vec_le_tl M))
+            end M) n v (member_refl v).
+
+  Definition fmap_A A B (P : A -> Prop) (f : forall x, P x -> B) (x : App P)
+    : CApp B := existT _ (c_shape (sval x)) (fmap_ f (proj2_sig x)).
+
+  Definition f_out (x : sig Fin) : App Fin :=
+    exist _ (g_out (sval x)) (Fin_inv1 (proj2_sig x)).
+
+  Definition f_cata A (g : CApp A -> A) (x : sig Fin) : A
+    := (fix f p (FIN : Fin p) {struct FIN} : A
+        := (g \o fmap_A f \o f_out) (exist _ _ FIN)) _ (proj2_sig x).
+
+  Definition Terminating A (h : A -> IApp A)
+    := { x : A | Fin (ana (to_capp (A:=A) \o h) x) }.
+
+  Definition vmap_P A B (P : A -> Prop)
+             (f : forall x, P x -> B) n (v : Vector.t A n) (H : VAll P v) : vec B n
+    := (cofix m n (v' : vec A n) (M : vec_le v' v) :=
+            match v' in vec _ m return vec_le v' v -> vec B m with
+            | vnil => fun=> vnil B
+            | vcons h _ t =>
+              fun M => vcons (f h (H _ (vec_le_hd M))) (m _ t (vec_le_tl M))
+            end M) n v (member_refl v).
+
+  Definition f_ana_ A (h : A -> IApp A) (x : Terminating h) : LFix
+    := (fix f x (H : Fin (ana (to_capp (A:=A) \o h) x)) {struct H} :=
+          l_in \o i_fmap
+       )
+
+    (* move: H. *)
+    (* rewrite ana_unroll/==>/Fin_inv1/=. *)
+    (* move: (h x)=> [sh]; rewrite /OCC/==>v H. *)
+    (* apply: l_in. *)
+    (* apply/(existT _ sh). *)
+    (* rewrite /OCC. *)
+    (* have: *)
+    (*   (forall y, Member y (ivec_to_cvec v) -> Member y (ivec_to_cvec v)) *)
+    (*   by []. *)
+    (* move: {-2} v. *)
+    (* move: {-4 5}(occ sh) => m. *)
+    (* elim=>/=. *)
+    (* move=> _. *)
+    (* apply: Vector.nil. *)
+    (* move=> h0 n t Ih H'. *)
+    (* apply: Vector.cons. *)
+    (* apply: f_ana_. *)
+    (* apply: H=>/={Ih}. *)
+    (* apply/member_vmap/H'; left; reflexivity. *)
+    (* by apply/Ih=>y M; apply/H'; right. *)
+  Defined.
+    :=
+    := cofix f := g_in \o f_map_ f \o g.
+
+  Inductive Fin_ana A (P : A -> Prop) (g : sig P -> App P) : sig P -> Prop :=
+  | Ana_fold x : VAll (Fin_ana g) (proj2_sig (g x)) -> Fin_ana g x
+  .
+
+  Lemma Ana_inv1 A (P : A -> Prop) (g : sig P -> App P) (x : sig P)
+    : Fin_ana g x -> VAllP (Fin_ana g) (proj2_sig (g x)).
+  Proof. by case. Defined.
+
+  Derive Dependent Inversion VAllP_inv
+    with (forall A (P : A -> Prop) (Q : sig P -> Prop)
+                 (g : sig P -> App P) n (v : vec A n) (H : VAll P v),
+             VAllP Q H)
+         Sort Prop.
+
+  (* Finiteness: *)
+  Definition f_ana A (P : A -> Prop) (g : sig P -> App P)
+             (H : forall (x : sig P), Fin (f_ana_ g x))
+             (x : sig P) : Fix := exist _ _ (H x).
+
+  Fixpoint Member A x n (v : vec A n) {struct n} :=
+    match v in vec _ m return Prop with
+    | vnil => False
+    | vcons h r t =>
+      match n with
+      |
+      x = h \/ Member x t
+    end.
+
+  Definition VAll A (P : A -> Prop) n (v : vec A n) :=
+
+
+
+  Definition Fix := sig Fin.
+  (* Definition App A (P : A -> Prop) := {x : CApp A | VAll P (c_cont x) }. *)
+
+  Definition f_in (x : CApp Fix) : Fix :=
+    let gf := existT _ (c_shape x) (sval (p_unzip (c_cont x)))
+    in exist _ _ (Fin_fold (x:=gf) (proj2_sig (p_unzip (c_cont x)))).
+  Definition f_out (x : Fix) : CApp Fix :=
+    existT _ (c_shape (g_out (sval x))) (p_zip (Fin_inv1 (proj2_sig x))).
 
   Definition fmap A B (P : A -> Prop) (Q : B -> Prop)
              (f : forall x, P x -> sig Q)
@@ -476,6 +581,23 @@ Section Definitions.
            fun E =>
              exist _ _ (P_cons (proj2_sig (f h (VAll_inv1 H E)))
                                (proj2_sig (m r t (VAll_inv2 H E))))
+         end erefl.
+
+
+  Definition f_cata A (P : A -> Prop) (g : CApp (sig P) -> sig P) (x : Fix) : sig P
+    := (fix f p (FIN : Fin p) {struct FIN} : sig P
+         := (g \o fmap f \o f_out) (exist Fin p FIN)) _ (proj2_sig x).
+
+  Definition fmap_ A B (P : A -> Prop)
+             (f : sig P -> B)
+    : forall n (x : vec A n), VAll P x -> vec B n
+    := cofix m n (v : vec A n) (H : VAll P v)  :=
+         match v as v0 in vec _ m
+               return existT _  _ v = existT _ _ v0 -> vec B m
+         with
+         | vnil => fun => vnil B
+         | vcons h r t =>
+           fun E => vcons (f (exist _ _ (VAll_inv1 H E))) (m r t (VAll_inv2 H E))
          end erefl.
 
   Definition f_map_ A B (P : A -> Prop)
@@ -494,6 +616,20 @@ Section Definitions.
   Definition f_ana_ A (P : A -> Prop) (g : sig P -> App P) : sig P -> GFix
     := cofix f := g_in \o f_map_ f \o g.
 
+  Inductive Fin_ana A (P : A -> Prop) (g : sig P -> App P) : sig P -> Prop :=
+  | Ana_fold x : VAll (Fin_ana g) (proj2_sig (g x)) -> Fin_ana g x
+  .
+
+  Lemma Ana_inv1 A (P : A -> Prop) (g : sig P -> App P) (x : sig P)
+    : Fin_ana g x -> VAllP (Fin_ana g) (proj2_sig (g x)).
+  Proof. by case. Defined.
+
+  Derive Dependent Inversion VAllP_inv
+    with (forall A (P : A -> Prop) (Q : sig P -> Prop)
+                 (g : sig P -> App P) n (v : vec A n) (H : VAll P v),
+             VAllP Q H)
+         Sort Prop.
+
   (* Finiteness: *)
   Definition f_ana A (P : A -> Prop) (g : sig P -> App P)
              (H : forall (x : sig P), Fin (f_ana_ g x))
@@ -511,9 +647,17 @@ Section Definitions.
              (x : sig (FIN_ANA h)) : sig P
     := exist _ (sval x) (sval (proj2_sig x)).
 
+  Definition f_ana_unroll_ A (P : A -> Prop) (h : sig P -> App P) :
+    f_ana_ h =1 g_in \o f_map_ (f_ana_ h) \o h.
+  Proof. by move=>x/=; rewrite (rw_comp (g_in_out) (f_ana_ _ _)). Defined.
+
   Definition wrap_fin A (Q : A -> Prop) (h : sig Q -> App Q)
-             (x : sig (FIN_ANA h)) : App (FIN_ANA h) :=
-    exist (fun x => VAll (FIN_ANA h) (c_cont x)) (sval (h (forget_fin x))) (Fin_inv1 (proj2_sig (proj2_sig x))).
+             (x : sig (FIN_ANA h)) : App (FIN_ANA h).
+    Print FIN_ANA.
+    move: x=> [x [Q_x]].
+    rewrite f_ana_unroll_/=. =>/Fin_inv1.
+    rewrite (rw_comp g_out_in).
+    (* exist (fun x => VAll (FIN_ANA h) (c_cont x)) (sval (h (forget_fin x))) (Fin_inv1 (proj2_sig (proj2_sig x))). *)
 
   Definition f_hylo B A (P : B -> Prop) (Q : A -> Prop)
              (g : App P -> sig P) (h : sig Q -> App Q)
