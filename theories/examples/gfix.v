@@ -754,20 +754,21 @@ Module QSort.
     := let: existT sh_t c_t := t in
        match sh_t return Vector.t (seq nat) (tree_occ _ sh_t) -> seq nat with
        | Empty => fun=>[::]
-       | Div h =>
-         fun c=> getl c ++ h :: getr c
-           (* match c in Vector.t _ n return n = 2 -> seq nat with *)
-           (* | Vector.nil => fun e=> match e with end *)
-           (* | Vector.cons l m v => *)
-           (*   match v in Vector.t _ m return m.+1 = 2 -> seq nat with *)
-           (*   | Vector.nil => fun e=> match e with end *)
-           (*   | Vector.cons r m v => fun => l ++ h :: r *)
-           (*   end *)
-           (* end erefl *)
+       | Div h => fun c=> getl c ++ h :: getr c
        end c_t.
 
   Lemma p_split_terminates (l : list nat) : FinF p_split l.
-  Admitted.
+  Proof.
+    move: {-1}(size l) (leqnn (size l)) => n; move: l.
+    elim: n=>[|n Ih] [|h t]/= LE; eauto with gfix; constructor=>/=.
+    - by move=> x [].
+    - by rewrite ltn0 in LE.
+    - move=> e/= [->|[->|//]]; apply/Ih.
+      + rewrite size_filter.
+        by apply: (leq_ltn_trans (count_size _ t) LE).
+      + rewrite size_filter.
+        by apply: (leq_ltn_trans (count_size _ t) LE).
+  Qed.
 
   Definition spl1 := f_ana p_split_terminates.
   (* Definition spl2 := ana p_split_. *)
@@ -784,6 +785,7 @@ Extraction Implicit Vector.cons [n].
 Extraction Implicit Vector.map [n].
 Extraction Implicit i_fmap' [m n].
 Extraction Implicit i_fmap_ [n].
+Extract Inductive Vector.t => "list" [ "[]" "(::)" ].
 Extraction Inline projT1.
 Extraction Inline projT2.
 Extraction Inline pmap.
