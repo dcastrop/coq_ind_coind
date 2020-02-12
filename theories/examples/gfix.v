@@ -1,8 +1,6 @@
 From mathcomp Require Import all_ssreflect.
 From Paco Require Import paco paco2.
 
-Require Import Eqdep_dec.
-
 Set Implicit Arguments.
 Unset Strict Implicit.
 Import Prenex Implicits.
@@ -157,16 +155,16 @@ Section Definitions.
   (** Assumptions and Strict positivisation of functors, using vectors as    **)
   (** "functions with finite support"                                        **)
   (****************************************************************************)
-  Parameter F : forall (t : Type),  Type.
-  Parameter occ : forall (X : Type), F X -> nat.
-  Definition OCC (V : Type -> nat -> Type) Y X (x : F Y) := V X (occ x).
-  Definition CApp X := {sh : F unit & OCC vec X sh}.
-  Coercion c_shape X (a : CApp X) : F unit := projT1 (P:=OCC vec X) a.
+  Context (F : Type). (* Shape *)
+  Context (occ : F -> nat). (* Number of positions *)
+  Definition OCC (V : Type -> nat -> Type) X (x : F) := V X (occ x).
+  Definition CApp X := {sh : F & OCC vec X sh}.
+  Coercion c_shape X (a : CApp X) : F := projT1 (P:=OCC vec X) a.
   Coercion c_cont X  (a : CApp X) : OCC vec X (c_shape a)
     := projT2 (P:=OCC vec X) a.
 
-  Definition IApp X := {sh : F unit & OCC Vector.t X sh}.
-  Coercion i_shape X (a : IApp X) : F unit := projT1 (P:=OCC Vector.t X) a.
+  Definition IApp X := {sh : F & OCC Vector.t X sh}.
+  Coercion i_shape X (a : IApp X) : F := projT1 (P:=OCC Vector.t X) a.
   Coercion i_cont X (a : IApp X) : OCC Vector.t X (i_shape a)
     := projT2 (P:=OCC Vector.t X) a.
 
@@ -181,14 +179,14 @@ Section Definitions.
   Lemma to_iapp_capp A : to_iapp (A:= A) \o to_capp (A := A) =1 id.
   Proof. by case=>sh cn; rewrite /to_capp/to_iapp/= iso_ci_vec_l. Qed.
 
-  Parameter strict : forall X, F X -> IApp X.
-  Arguments strict [X] f_x.
+  (* Parameter strict : forall X, F X -> IApp X. *)
+  (* Arguments strict [X] f_x. *)
 
-  Parameter un_strict : forall X, IApp X -> F X.
-  Arguments un_strict [X] a_x.
+  (* Parameter un_strict : forall X, IApp X -> F X. *)
+  (* Arguments un_strict [X] a_x. *)
 
-  Axiom un_strict_strict : forall X, un_strict (X:=X) \o strict (X:=X) =1 id.
-  Axiom strict_un_strict : forall X, strict (X:=X) \o un_strict (X:=X) =1 id.
+  (* Axiom un_strict_strict : forall X, un_strict (X:=X) \o strict (X:=X) =1 id. *)
+  (* Axiom strict_un_strict : forall X, strict (X:=X) \o un_strict (X:=X) =1 id. *)
 
   Inductive CVec_All (A : Type) (P : A -> Prop)
     : forall n, vec A n -> Prop :=
@@ -306,16 +304,21 @@ Section Definitions.
   (** Greatest fixpoints                                                     **)
   (****************************************************************************)
 
-  CoInductive GFix : Type := G_in {g_out : CApp GFix}.
+  CoInductive GFix : Type
+    := G_fold (sh : F) (rec : vec GFix (occ sh)).
   Hint Constructors GFix : gfix.
+  Definition g_shape x := match x with | G_fold f _ => f end.
+  Definition g_cont x : vec GFix (occ (g_shape x)) :=
+    match x with | G_fold _ f => f end.
 
-  Notation "'g_in'" := (G_in).
+  Definition g_in  x := G_fold (c_cont x).
+  Definition g_out x : CApp GFix := existT _ _ (g_cont x).
 
   Lemma g_in_out : g_in \o g_out =1 id.
   Proof. by case. Defined.
 
   Lemma g_out_in : g_out \o g_in =1 id.
-  Proof. by []. Qed.
+  Proof. by case. Qed.
 
   Definition GFix_EQ_ (r : GFix -> GFix -> Prop) (gl gr : GFix) : Prop :=
     CApp_R r (g_out gl) (g_out gr).
@@ -342,8 +345,8 @@ Section Definitions.
   Proof.
     move: x {-1 3}x (erefl x); apply/paco2_acc=> r0 _ CIH.
     move=> x0 x -> {x0}; move: CIH=>/(_ _ _ erefl)-CIH.
-    apply/paco2_fold; case: x => a_x; constructor=>//=.
-    move: (c_cont a_x); rewrite /OCC; move: (occ a_x)=>n.
+    apply/paco2_fold; case: x => a_x v; constructor=>//=.
+    move: (occ a_x) v=>n.
     by elim=>[|h m t Ih]; eauto with gfix.
   Qed.
 
@@ -372,8 +375,8 @@ Section Definitions.
     : f =1/g g -> g_out \o f =1/a/g g_out \o g.
   Proof.
     move=> H x/=; move: (f x) (g x) (H x) => {H x f g}.
-    case=>af; case=>ag/= /(paco2_unfold GFix_EQ_mon)-[/= H0 H1].
-    constructor=>//; move: H1; elim; eauto with gfix.
+    case=>sh_f c_f; case=>sh_g c_g/= /(paco2_unfold GFix_EQ_mon)-[/= E H1].
+    constructor=>//=; elim: H1; eauto with gfix.
     by move=> n m h1 h2 t1 t2 [E1 _ E2|//]; constructor.
   Qed.
 
@@ -381,15 +384,21 @@ Section Definitions.
   Proof. by move=> H x; rewrite H; apply/gfix_refl. Qed.
 
   Definition ana A (h : A -> CApp A) : A -> GFix
-    := cofix f := g_in \o c_fmap f \o h.
+    := cofix f x :=
+         match h x with
+         | existT sh_x c_x => @G_fold sh_x (vmap f c_x)
+         end.
 
   Lemma ana_eq A (h : A -> CApp A) :
     g_out \o ana h =1 c_fmap (ana h) \o h.
-  Proof. by []. Qed.
+  Proof. move=>x; rewrite /g_out/=; by case: (h x)=>/=. Qed.
 
   Corollary ana_unroll A (h : A -> CApp A) :
     ana h =1 g_in \o c_fmap (ana h) \o h.
-  Proof. by move=>x; rewrite /= (rw_comp (g_in_out) (ana _ _)). Qed.
+  Proof.
+    move=>x; rewrite -(rw_comp g_in_out (ana _ _))/=.
+    by rewrite (rw_comp (ana_eq _) _).
+  Qed.
 
   Lemma ana_univ_r A (h : A -> CApp A) (f : A -> GFix)
     : g_out \o f =1/a/g c_fmap f \o h -> f =1/g ana h.
@@ -427,32 +436,46 @@ Section Definitions.
   (** Least fixpoints                                                        **)
   (****************************************************************************)
 
-  Inductive LFix : Type := L_in {l_out : IApp LFix}.
+  Inductive LFix : Type
+    := L_fold (sh : F) (c : Vector.t LFix (occ sh)).
   Hint Constructors LFix : gfix.
+  Definition l_shape x := match x with | L_fold x _ => x end.
+  Definition l_cont x : Vector.t LFix (occ (l_shape x))
+    := match x with | L_fold _ x => x end.
 
-  Notation "'l_in'" := (L_in).
+  Definition l_in (x : IApp LFix) : LFix :=
+    match x with | existT _ c => L_fold c end.
+
+  Definition l_out (x : LFix) : IApp LFix :=
+    match x with | L_fold _ c => existT _ _ c end.
 
   Lemma l_in_out : l_in \o l_out =1 id.
   Proof. by case. Qed.
 
   Lemma l_out_in : l_out \o l_in =1 id.
-  Proof. by []. Qed.
+  Proof. by case. Qed.
 
-  Fixpoint LFix_EQ (gl gr : LFix) {struct gl} : Prop :=
-    IApp_R LFix_EQ (l_out gl) (l_out gr).
+  Fixpoint LFix_EQ (f g : LFix) {struct f} : Prop :=
+    l_shape f = l_shape g /\ IVec_R LFix_EQ (l_cont f) (l_cont g).
 
   Notation "x =l y" := (LFix_EQ x y) : type_scope.
 
   Definition cata A (g : IApp A -> A) : LFix -> A
-    := fix f x := (g \o i_fmap f \o l_out) x.
+    := fix f x :=
+         match x with
+         | L_fold sh_x c_x => g (existT _ sh_x (Vector.map f c_x))
+         end.
 
   Lemma cata_eq A (g : IApp A -> A) :
     cata g \o l_in =1 g \o i_fmap (cata g).
-  Proof. by []. Qed.
+  Proof. by move=>[sh_x c_x]/=; rewrite /i_fmap/=. Qed.
 
   Corollary cata_unroll A (g : IApp A -> A) :
     cata g =1 g \o i_fmap (cata g) \o l_out.
-  Proof. by move=>x; rewrite -(rw_comp (l_in_out) x)/=. Qed.
+  Proof.
+    move=> x; rewrite -[in LHS](rw_comp l_in_out x).
+    by rewrite -[cata g _]/((cata g \o l_in) (l_out x)) cata_eq.
+  Qed.
 
   Lemma cata_univ A (g : IApp A -> A) :
     forall (f : LFix -> A), cata g =1 f <-> f \o l_in =1 g \o i_fmap f.
@@ -525,7 +548,7 @@ Section Definitions.
       f_ana_ h F1 = f_ana_ h F2.
   Proof.
     move: x F1 F2; fix Ih 2; move=> x [{}x H1] F2; move:F2 H1=>[{}x H2] H1/=.
-    rewrite /wrap/fmap_I/i_fmap_/=; congr l_in; congr existT.
+    congr L_fold; rewrite /i_fmap_/=.
     move: {1 4 6}(i_cont (h x)) (member_refl _).
     rewrite /OCC; move: {-3 5 7 9} (occ (h x)) => n.
     elim=>[|hv mv tv IhL]//= M.
@@ -539,29 +562,40 @@ Section Definitions.
       f_ana T =1 l_in \o i_fmap (f_ana T) \o h.
   Proof.
     rewrite /f_ana/wrap/==>x.
-    move: (T x)=> [{}x ALL]/=; congr l_in.
-    rewrite /fmap_I/i_fmap/i_fmap_/=; congr existT.
+    move: (T x)=> [{}x ALL]/=; congr L_fold.
+    rewrite /fmap_I/i_fmap/i_fmap_/=.
     move: {-2 3}(i_cont (h x)) (member_refl _).
     rewrite /OCC/=; move: {-3 5 7}(occ (h x))=>n.
     by elim=>[|hv mv tv Ih]//= H; rewrite Ih f_ana_irr.
   Qed.
 
+  Lemma FinF_inv1 A (h : A -> IApp A) (sh : F) (c : OCC Vector.t A sh) (x : A)
+        : FinF h x -> existT _ sh c = h x -> IAll (FinF h) c.
+  Proof.
+    case=> {}x H E e M; apply/H.
+    by move: E M=><-/=.
+  Defined.
+
   Definition f_hylo_ A B (g : IApp B -> B) (h : A -> IApp A)
     : forall x, FinF h x -> B
-    := fix f x H := (g \o fmap_I f \o wrap h) (exist _ x H).
+    := fix f x H :=
+         match h x as h0 return h0 = h x -> B with
+         | existT sh_x c_x => fun E => g (existT _ sh_x (i_fmap_ f (FinF_inv1 H E)))
+         end erefl.
   Arguments f_hylo_ [A B] g h [x] F.
 
   Lemma f_hylo_irr A B (g : IApp B -> B) (h : A -> IApp A)
     : forall x (F1 F2 : FinF h x), f_hylo_ g h F1 = f_hylo_ g h F2.
   Proof.
-    fix Ih 2; move=> x.
-    case=>[{}x H1] F2; case: F2 H1=>[{}x H2] H1/=; congr g.
-    rewrite /fmap_I/wrap/=; congr existT; rewrite /i_fmap_.
-    move: {1 4 6}(i_cont (h x)) (member_refl _).
-    rewrite /OCC; move: {-3 5 7 9} (occ (h x)) => n.
-    elim=>[|hv mv tv IhL]//= M.
-    by rewrite IhL (Ih _ (H1 _ (vec_le_hd M)) (H2 _ (vec_le_hd M))).
-  Qed.
+  Admitted.
+  (*   fix Ih 2; move=> x. *)
+  (*   case=>[{}x H1] F2; case: F2 H1=>[{}x H2] H1/=; congr g. *)
+  (*   rewrite /fmap_I/wrap/=; congr existT; rewrite /i_fmap_. *)
+  (*   move: {1 4 6}(i_cont (h x)) (member_refl _). *)
+  (*   rewrite /OCC; move: {-3 5 7 9} (occ (h x)) => n. *)
+  (*   elim=>[|hv mv tv IhL]//= M. *)
+  (*   by rewrite IhL (Ih _ (H1 _ (vec_le_hd M)) (H2 _ (vec_le_hd M))). *)
+  (* Qed. *)
 
   Definition f_hylo A B (g : IApp B -> B) (h : A -> IApp A)
              (T : forall x, FinF h x)
@@ -572,13 +606,14 @@ Section Definitions.
         (T : forall x, FinF h x)
     : f_hylo g h T =1 g \o i_fmap (f_hylo g h T) \o h.
   Proof.
-    rewrite /f_hylo/wrap/==>x.
-    move: (T x)=> [{}x ALL]/=; congr g.
-    rewrite /fmap_I/i_fmap/i_fmap_/=; congr existT.
-    move: {-2 3}(i_cont (h x)) (member_refl _).
-    rewrite /OCC/=; move: {-3 5 7}(occ (h x))=>n.
-    by elim=>[|hv mv tv Ih]//= H; rewrite Ih f_hylo_irr.
-  Qed.
+  Admitted.
+  (*   rewrite /f_hylo/wrap/==>x. *)
+  (*   move: (T x)=> [{}x ALL]/=; congr g. *)
+  (*   rewrite /fmap_I/i_fmap/i_fmap_/=; congr existT. *)
+  (*   move: {-2 3}(i_cont (h x)) (member_refl _). *)
+  (*   rewrite /OCC/=; move: {-3 5 7}(occ (h x))=>n. *)
+  (*   by elim=>[|hv mv tv Ih]//= H; rewrite Ih f_hylo_irr. *)
+  (* Qed. *)
 
   (****************************************************************************)
   (** "Finite Greatest Fixpoints"                                            **)
@@ -625,138 +660,157 @@ Section Definitions.
 
 End Definitions.
 
-Notation "A +> B" := {h : A -> B | forall x, Fin (ana h x)}.
 Notation "x =l y" := (LFix_EQ x y) : type_scope.
-Notation "'l_in'" := L_in (at level 0).
 Notation "x =g y" := (GFix_EQ x y) : type_scope.
-Notation "'g_in'" := G_in (at level 0).
+(* Notation "'g_in'" := G_in (at level 0). *)
 
 Module ExInfTree.
 
-  (* Functor & "strict positivisation" *)
-  Inductive T A (t : Type) : Type :=
-  | C : A -> seq t -> T A t.
+  (* Functor shape *)
+  Inductive t A : Type :=
+  | C (x : A) (n : nat) : t A.
 
-  Definition T_OCC (A X : Type) (x : X) (t : T A X) : Prop :=
+  Fixpoint t_occ A (t : t A) :=
     match t with
-    | C _ l => List.In x l
+    | C _ l => l
     end.
-
-  Fixpoint lmap X Y (l : seq X) {struct l}
-    : (forall (x : X), List.In x l -> Y) -> seq Y
-    := match l return (forall (x : X), List.In x l -> Y) -> seq Y with
-       | [::] =>
-         fun _ =>
-           [::]
-       | h :: t =>
-         fun fn =>
-           fn h (or_introl (erefl h)) :: lmap (fun x p => fn x (or_intror p))
-       end.
-
-  Definition t_omap (A X Y : Type) (p : T A X)
-    : (forall (x : X), T_OCC x p -> Y) -> T A Y
-    := match p return (forall (x : X), T_OCC x p -> Y) -> T A Y with
-       | C h l => fun f => C h (lmap f)
-       end.
-
-  Definition t_app := fun X Y (x : T X Y) => mk_app (@T_OCC X) x.
-  Coercion t_app : T >-> App.
+  Arguments t_occ A t : clear implicits.
 
   (* The example *)
-  Definition ctree (X : Type) := GFix nat (@T_OCC X).
+  Definition ctree (X : Type) := GFix (t_occ X).
 
-  Fixpoint downfrom n :=
+  Fixpoint downfrom (n : nat) : vec nat n :=
     match n with
-    | 0 => [::]
-    | S m => n :: downfrom m
+    | 0 => vnil _
+    | S m => vcons n (downfrom m)
     end.
 
+  Definition tree_gen (n : nat) : CApp (t_occ nat) nat :=
+    existT _ (C (2 *n) _) (downfrom n).
+
   Definition exn : nat -> ctree nat :=
-    ana (fun n => C n (downfrom n)).
+    ana tree_gen.
 End ExInfTree.
+
+From Coq Require Extraction.
+(* Unset Extraction SafeImplicits. *)
+Extract Inductive sigT => "(*)"  [ "(,)" ].
+Extraction Implicit vcons [n].
+Extraction Implicit vmap [n].
+(* Extraction Inline projT1. *)
+(* Extraction Inline projT2. *)
+Extraction Inline ana.
+Extraction Inline comp.
+Extraction Inline c_shape.
+Extraction Inline c_cont.
+Extraction Inline c_fmap.
+Extraction Inline ExInfTree.t_occ.
+Extraction Inline ExInfTree.tree_gen.
+Extraction ExInfTree.
 
 Module QSort.
   (* Functor definitions *)
-  Inductive F A T := Empty | Div (PIVOT : A) (LEFT : T) (RIGHT : T).
+  Inductive tree' A := Empty | Div (PIVOT : A).
 
-  Definition F_OCC A X : X -> F A X -> Prop :=
-    fun x p =>
-      match p with
-      | Empty => False
-      | Div _ l r => x = l \/ x = r
-      end.
+  Definition tree_occ A (x : tree' A) : nat :=
+    match x with
+    | Empty => 0
+    | Div _ => 2
+    end.
+  Arguments tree_occ A x : clear implicits.
 
-  Definition F_DOM A := DOM (@F_OCC A).
+  Definition empty A : IApp (tree_occ nat) A
+    := existT _ (Empty _) (Vector.nil _).
+  Definition node X n (l r : X) : IApp (tree_occ nat) X
+    := existT _ (Div n) (Vector.cons _ l _ (Vector.cons _ r _ (Vector.nil _))).
 
-  Definition p_omap A X Y (p : F A X) (f : F_DOM p -> Y) : F A Y :=
-    match p as p0 return p = p0 -> F A Y with
-    | Empty => fun _ => Empty _ _
-    | Div h l r =>
-      fun PF =>
-        match PF in _ = x return F_DOM x -> F_DOM x -> F A Y with
-        | erefl => fun pl pr => Div h (f pl) (f pr)
-        end (exist _ _ (or_introl erefl)) (exist _ _ (or_intror erefl))
-    end erefl.
+  Definition getl (A X : Type) (h : A) (l : Vector.t X (tree_occ _ (Div h)))
+    : X := match l in Vector.t _ n return n = 2 -> X with
+           | Vector.nil => fun E => match E with end
+           | Vector.cons h _ _ => fun=>h
+           end erefl.
 
-  Definition f_app := fun X Y (x : F X Y) => mk_app (@F_OCC X) x.
-  Definition f_fun := fun L X Y (x : App L (@F_OCC X) Y) =>
-                        p_omap (get (a:=x)).
-  Coercion f_app : F >-> App.
+  Definition getr (A X : Type) (h : A) (l : Vector.t X (tree_occ _ (Div h)))
+    : X := match l in Vector.t _ n return n = 2 -> X with
+           | Vector.nil => fun E => match E with end
+           | Vector.cons _ m v =>
+             match v in Vector.t _ m return m.+1 = 2 -> X with
+             | Vector.nil => fun E => match E with end
+             | Vector.cons h _ _ => fun => h
+             end
+           end erefl.
 
   (* The qsort *)
-  Definition p_split_ (l : list nat) : F nat (list nat) :=
+  Definition p_split (l : list nat) : IApp (tree_occ nat) (seq nat) :=
     match l with
-    | [::] => Empty _ _
+    | [::] => empty _
     | h :: t =>
-      Div h [seq x <- t | x <= h] [seq x <- t | x > h]
+      node h [seq x <- t | x <= h] [seq x <- t | x > h]
     end.
 
-  Definition p_merge_ (t : F nat (list nat)) : list nat :=
-    match t with
-    | Empty => [::]
-    | Div h l r => l ++ h :: r
-    end.
-  Definition p_merge A := p_merge_ \o @f_fun A nat (seq nat).
+  Print Vector.
 
-  Lemma p_split_terminates (l : list nat) : Fin (ana p_split_ l).
-  Proof.
-    move: {-1}(size l) (leqnn (size l)) => n LE; move: l LE.
-    elim: n=>[|n Ih];case=>[|h t]/= LE; rewrite ana_unroll//; constructor=>[[//=]].
-    by move=> y []->; apply/Ih; rewrite size_filter; apply/(leq_trans (count_size _ _)).
-  Qed.
+  Definition p_merge (t : IApp (tree_occ nat) (seq nat)) : seq nat
+    := let: existT sh_t c_t := t in
+       match sh_t return Vector.t (seq nat) (tree_occ _ sh_t) -> seq nat with
+       | Empty => fun=>[::]
+       | Div h =>
+         fun c=> getl c ++ h :: getr c
+           (* match c in Vector.t _ n return n = 2 -> seq nat with *)
+           (* | Vector.nil => fun e=> match e with end *)
+           (* | Vector.cons l m v => *)
+           (*   match v in Vector.t _ m return m.+1 = 2 -> seq nat with *)
+           (*   | Vector.nil => fun e=> match e with end *)
+           (*   | Vector.cons r m v => fun => l ++ h :: r *)
+           (*   end *)
+           (* end erefl *)
+       end c_t.
 
-  Definition p_split : seq nat +> App (seq nat) (@F_OCC nat) (seq nat) :=
-    exist _ _ p_split_terminates.
+  Lemma p_split_terminates (l : list nat) : FinF p_split l.
+  Admitted.
 
-  Definition spl1 (x : list nat) := fana_ (p_split_terminates x).
-  Definition spl2 := ana p_split_.
-  Definition app A : LFix A _ -> list nat := cata (@p_merge A).
+  Definition spl1 := f_ana p_split_terminates.
+  (* Definition spl2 := ana p_split_. *)
+  Definition app : LFix (tree_occ nat) -> seq nat := cata p_merge.
 
-  Definition qsort : list nat -> list nat
-    := fun x => fhylo (@p_merge (list nat)) p_split x.
+  Definition qsort : list nat -> list nat := f_hylo p_merge p_split_terminates.
 End QSort.
 
 (* From Coq Require Extraction ExtrHaskellBasic ExtrHaskellNatInteger. *)
 From Coq Require Extraction ExtrOcamlBasic ExtrOcamlNatInt.
-Extraction Inline mk_app.
+Set Extraction TypeExpand.
+Set Extraction Flag 2047.
+Extraction Implicit Vector.cons [n].
+Extraction Implicit Vector.map [n].
+Extraction Implicit i_fmap' [m n].
+Extraction Implicit i_fmap_ [n].
+Extraction Inline projT1.
+Extraction Inline projT2.
 Extraction Inline pmap.
 Extraction Inline shape.
-Extraction Inline get.
-Extraction Inline fmap_dom.
 Extraction Inline fmap.
 Extraction Inline comp.
 Extraction Inline ana.
-Extraction Inline fana_.
+Extraction Inline f_ana.
 Extraction Inline cata.
-Extraction Inline tcata.
-Extraction Inline fhylo.
-Extraction Inline fin_hylo.
+Extraction Inline f_cata.
+Extraction Inline f_hylo.
+Extraction Inline f_hylo_.
+Extraction Inline fmap_I.
+Extraction Inline wrap.
+Extraction Inline i_cont.
+Extraction Inline i_shape.
+Extraction Inline i_fmap_.
+Extraction Inline i_fmap'.
+Extraction Inline Vector.hd.
+Extraction Inline Vector.tl.
+Extraction Inline Vector.caseS.
+Extraction Inline QSort.tree_occ.
+Extraction Inline QSort.empty.
+Extraction Inline QSort.node.
 Extraction Inline QSort.p_merge.
-Extraction Inline QSort.p_merge_.
 Extraction Inline QSort.p_split.
-Extraction Inline QSort.p_split_.
-Extraction Inline QSort.p_omap.
-Extraction Inline QSort.f_app.
-Extraction Inline QSort.f_fun.
-Print QSort.
+Extraction Implicit QSort.getl [h].
+Extraction Implicit QSort.getr [h].
+(* Unset Extraction SafeImplicits. *)
 Recursive Extraction QSort.
