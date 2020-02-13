@@ -815,5 +815,4 @@ Extraction Inline QSort.p_merge.
 Extraction Inline QSort.p_split.
 Extraction Implicit QSort.getl [h].
 Extraction Implicit QSort.getr [h].
-(* Unset Extraction SafeImplicits. *)
 Recursive Extraction QSort.
