@@ -412,7 +412,7 @@ Section Definitions.
     move: CIH=> /(_ _ _ (ex_intro _ _ (conj _ _))).
     move=>/(_ _ _ _ erefl erefl)-CIH.
 
-    have {H}H: f =1/g g_in \o c_fmap f \o h
+    have {}H: f =1/g g_in \o c_fmap f \o h
       by move: H=>/eq_g_in-H y; move: (H y)=>/=; rewrite (rw_comp g_in_out).
 
     move:(paco2_mon r (H x))=>/(_ (fun x y z => False_rect _ z))-H'.
@@ -576,26 +576,27 @@ Section Definitions.
     by move: E M=><-/=.
   Defined.
 
+  Print i_fmap_.
+
   Definition f_hylo_ A B (g : IApp B -> B) (h : A -> IApp A)
     : forall x, FinF h x -> B
     := fix f x H :=
-         match h x as h0 return h0 = h x -> B with
-         | existT sh_x c_x => fun E => g (existT _ sh_x (i_fmap_ f (FinF_inv1 H E)))
-         end erefl.
+         match h x as h0 return IAll (FinF h) (i_cont h0) -> B with
+         | existT s_x c_x => fun H => (g (existT _ s_x (i_fmap_ f H)))
+         end (FinF_inv H).
   Arguments f_hylo_ [A B] g h [x] F.
 
   Lemma f_hylo_irr A B (g : IApp B -> B) (h : A -> IApp A)
     : forall x (F1 F2 : FinF h x), f_hylo_ g h F1 = f_hylo_ g h F2.
   Proof.
-  Admitted.
-  (*   fix Ih 2; move=> x. *)
-  (*   case=>[{}x H1] F2; case: F2 H1=>[{}x H2] H1/=; congr g. *)
-  (*   rewrite /fmap_I/wrap/=; congr existT; rewrite /i_fmap_. *)
-  (*   move: {1 4 6}(i_cont (h x)) (member_refl _). *)
-  (*   rewrite /OCC; move: {-3 5 7 9} (occ (h x)) => n. *)
-  (*   elim=>[|hv mv tv IhL]//= M. *)
-  (*   by rewrite IhL (Ih _ (H1 _ (vec_le_hd M)) (H2 _ (vec_le_hd M))). *)
-  (* Qed. *)
+    fix Ih 2; move=> x.
+    case=>[{}x H1] F2; case: F2 H1=>[{}x H2] H1/=.
+    move: (h x) H2 H1; case=>/= x0 p H2 H1; congr g; congr existT.
+    rewrite /i_fmap_; move: {1 4 6}p (member_refl _).
+    rewrite /OCC; move: {-3 5 7 9} (occ x0) => n.
+    elim=>[|hv mv tv IhL]//= M.
+    by rewrite IhL (Ih _ (H1 _ (vec_le_hd M)) (H2 _ (vec_le_hd M))).
+  Qed.
 
   Definition f_hylo A B (g : IApp B -> B) (h : A -> IApp A)
              (T : forall x, FinF h x)
@@ -606,14 +607,14 @@ Section Definitions.
         (T : forall x, FinF h x)
     : f_hylo g h T =1 g \o i_fmap (f_hylo g h T) \o h.
   Proof.
-  Admitted.
-  (*   rewrite /f_hylo/wrap/==>x. *)
-  (*   move: (T x)=> [{}x ALL]/=; congr g. *)
-  (*   rewrite /fmap_I/i_fmap/i_fmap_/=; congr existT. *)
-  (*   move: {-2 3}(i_cont (h x)) (member_refl _). *)
-  (*   rewrite /OCC/=; move: {-3 5 7}(occ (h x))=>n. *)
-  (*   by elim=>[|hv mv tv Ih]//= H; rewrite Ih f_hylo_irr. *)
-  (* Qed. *)
+    rewrite /f_hylo=>x/=.
+    move: (T x)=> [{}x ALL]/=.
+    move: (h x) ALL; case=>/= s_x c_x ALL; congr g.
+    rewrite /fmap_I/i_fmap/i_fmap_/=; congr existT.
+    move: {-2 3}c_x (member_refl _).
+    rewrite /OCC/=; move: {-3 5 7}(occ s_x)=>n.
+    by elim=>[|hv mv tv Ih]//= H; rewrite Ih f_hylo_irr.
+  Qed.
 
   (****************************************************************************)
   (** "Finite Greatest Fixpoints"                                            **)
