@@ -543,18 +543,31 @@ Section Definitions.
     by rewrite -[cata g _]/((cata g \o l_in) (l_out x)) cata_eq.
   Qed.
 
-  Lemma cata_P A P (g : IApp A -> A) : forall x, P (cata g x).
+  Lemma cata_univ_l A (g : IApp A -> A) :
+    forall (f : LFix -> A), cata g =1 f -> f \o l_in =1 g \o i_fmap f.
   Proof.
-    move=>[sh_x c_x]; rewrite cata_unroll/i_fmap/=.
-  (* Proof. *)
-  (*   rewrite cata_unroll/=. *)
-  (*   case: x=>/=; rewrite /i_fmap/=. *)
-  Admitted.
+    move=> f H x/=; rewrite -(H _) cata_unroll/= (rw_comp l_out_in).
+    suff: i_fmap (cata g) x = i_fmap f x by move=>->.
+    rewrite /i_fmap/=.
+    suff: Vector.map (cata g) (i_cont x) = Vector.map f (i_cont x) by move=>->.
+    by elim: (i_cont x)=>[|h n t Ih]//=; rewrite H Ih.
+  Qed.
 
+  Lemma cata_univ_r A (g : IApp A -> A) :
+    forall (f : LFix -> A), f \o l_in =1 g \o i_fmap f -> cata g =1 f.
+  Proof.
+    move=> f H; elim =>sh_x c_x Ih; rewrite cata_unroll/=.
+    move: (H (existT _ sh_x c_x))=>/=->; rewrite /i_fmap/=.
+    suff: Vector.map (cata g) c_x = Vector.map f c_x by move=>->.
+    elim: c_x Ih=>[|h_x n_x t_x IhV] Ih//=; rewrite Ih//= ?IhV; auto with gfix.
+    by move=> x M; apply/(Ih _ (or_intror M)).
+  Qed.
 
   Lemma cata_univ A (g : IApp A -> A) :
     forall (f : LFix -> A), cata g =1 f <-> f \o l_in =1 g \o i_fmap f.
-  Admitted.
+  Proof.
+    by move=>f; split; [apply/cata_univ_l|apply/cata_univ_r].
+  Qed.
 
   (****************************************************************************)
   (** "Terminating anamorphisms"                                             **)
