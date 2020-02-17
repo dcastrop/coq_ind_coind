@@ -5,150 +5,12 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Import Prenex Implicits.
 
-(* Reserved Notation "x '\pos' F" *)
-(*          (at level 70, no associativity, *)
-(*           format "'[hv' x '/ '  '\pos'  F ']'"). *)
 Reserved Notation "x =l y" (at level 70, no associativity).
 Reserved Notation "x =g y" (at level 70, no associativity).
 Reserved Notation "x =a/g y" (at level 70, no associativity).
 Reserved Notation "x '=1/g' y" (at level 70, no associativity).
 Reserved Notation "x '=1/a/g' y" (at level 70, no associativity).
 Reserved Notation "x '=1/sval' y" (at level 70, no associativity).
-(* Reserved Notation "x +> y" *)
-(*          (at level 90, no associativity). *)
-
-CoInductive vec (X : Type) : nat -> Type :=
-| vnil : vec X 0
-| vcons : X -> forall n, vec X n -> vec X n.+1.
-
-Lemma vcons_inj A (h1 h2 : A) n (t1 t2 : vec A n) :
-  vcons h1 t1 = vcons h2 t2 -> h1 = h2 /\ t1 = t2.
-Proof. move=>[]; eauto with *. Qed.
-
-Check list_ind.
-
-Lemma vec_ind (A : Type) (P : forall n, vec A n -> Prop)
-      (P_nil : P 0 (vnil A))
-      (P_cons : forall a n v, P n v -> P n.+1 (vcons a v))
-  : forall n v, P n v.
-Proof.
-  elim=>[|n Ih]; case E: _ / => [|h m t]//.
-  move: E t => [<- {m}] t.
-  by apply/P_cons/Ih.
-Qed.
-
-Lemma uvec X n (v : vec X n) : v = match v with
-                                   | vnil => vnil X
-                                   | vcons h _ t => vcons h t
-                                   end.
-Proof. by case: v. Qed.
-
-Definition vmap A B (f : A -> B) : forall n, vec A n -> vec B n :=
-  cofix vmap _ x :=
-    match x with
-    | vnil => vnil B
-    | vcons h _ t => vcons (f h) (vmap _ t)
-    end.
-
-Definition vmap_fold A (B : nat -> Type)
-           (g : A -> forall n, B n -> B n.+1) (z : B 0)
-  : forall n, vec A n -> B n
-  := fix f n v {struct n} :=
-       match v in vec _ n0 return n = n0 -> B n0 with
-       | vnil => fun=>z
-       | vcons h m t =>
-         match n return n = m.+1 -> B m.+1 with
-         | 0 => fun pf=>match pf with end
-         | n.+1 => fun pf=>match pf with | erefl => fun t=> g h _ (f _ t) end t
-         end
-       end erefl.
-
-Definition cvec_to_ivec A : forall n, vec A n -> Vector.t A n
-  := vmap_fold (Vector.cons A) (Vector.nil A).
-Fixpoint ivec_to_cvec A n (v : Vector.t A n)
-  := match v with
-     | Vector.nil => vnil A
-     | Vector.cons h n t => vcons h (ivec_to_cvec t)
-     end.
-
-Create HintDb gfix.
-
-Lemma vmap_nil A B (f : A -> B) : vmap f (vnil A) = vnil B.
-Proof. by rewrite (uvec (vmap _ _)). Qed.
-Hint Resolve vmap_nil : gfix.
-Hint Extern 1 =>
-match goal with
-| [ |- context[vmap _ (vnil _)] ] => rewrite vmap_nil
-end : gfix.
-
-Lemma vmap_cons A B (f : A -> B) (h : A) n (t : vec A n) :
-  vmap f (vcons h t) = vcons (f h) (vmap f t).
-Proof. by rewrite (uvec (vmap _ _)). Qed.
-Hint Resolve vmap_cons : gfix.
-Hint Extern 1 =>
-match goal with
-| [ |- context[vmap _ (vcons _ _)] ] => rewrite vmap_cons
-end : gfix.
-
-Lemma iso_ci_vec_l A n (v : Vector.t A n) : cvec_to_ivec (ivec_to_cvec v) = v.
-Proof. elim: v=>[|h m t Ih]/=; [|rewrite Ih]; by eauto with gfix. Qed.
-
-Lemma iso_ci_vec_r A n (v : vec A n) : ivec_to_cvec (cvec_to_ivec v) = v.
-Proof. elim: v=>[|h m t Ih]/=; [|rewrite Ih]; by eauto with gfix. Qed.
-
-Lemma vmap_imap A B (f : A -> B) n (v : Vector.t A n)
-  : vmap f (ivec_to_cvec v) = ivec_to_cvec (Vector.map f v).
-Proof. elim: v=>[|m h t Ih]/=; [|rewrite vmap_cons Ih]; by eauto with gfix. Qed.
-
-Lemma imap_vmap A B (f : A -> B) n (v : vec A n)
-  : Vector.map f (cvec_to_ivec v) = cvec_to_ivec (vmap f v).
-Proof. elim: v=>[|m h t Ih]/=; [|rewrite Ih]; by eauto with gfix. Qed.
-
-Lemma rw_comp A B C (f : A -> B) (g : B -> C) (h : A -> C) :
-  g \o f =1 h -> forall x, g (f x) = h x.
-Proof. by move=>H x; move: (H x)=>/=->. Qed.
-
-Definition Member A (x : A) : forall n : nat, vec A n -> Prop
-  := vmap_fold (B:=fun=>Prop) (fun h _ p => x = h \/ p) False.
-
-Lemma member_vmap A B (y : A) (f : A -> B) n (v : vec A n)
-  : Member y v -> Member (f y) (vmap f v).
-Proof. elim: v=>[|h m t Ih]//= [->|/Ih-H]; first (by left); by right. Qed.
-
-Definition vec_le A n m (v : vec A n) (v' : vec A m)
-  := forall (y : A), Member y v -> Member y v'.
-
-Lemma member_refl A n (v : vec A n) : vec_le v v.
-Proof. by []. Qed.
-Arguments member_refl [A n] v.
-
-Definition VAll A P n := fun (v : vec A n) => forall y, Member y v -> P y.
-
-Lemma vec_le_hd A n (v : vec A n) (h : A) m (t : vec A m) :
-  vec_le (vcons h t) v -> Member h v.
-Proof. by move=>/(_ h (or_introl erefl)). Qed.
-
-Lemma vec_le_tl A n (v : vec A n) (h : A) m (t : vec A m) :
-  vec_le (vcons h t) v -> vec_le t v.
-Proof. by move=>H x M; apply/H/or_intror/M. Qed.
-
-Lemma vall_tl A (P : A -> Prop) n (v : vec A n) (h : A) m (t : vec A m) :
-  VAll P v -> vec_le (vcons h t) v -> VAll P t.
-Proof. by move=> H1 H2 y M; apply/H1/H2; right. Defined.
-
-Lemma vall_hd A (P : A -> Prop) n (v : vec A n) (h : A) m (t : vec A m) :
-  VAll P v -> vec_le (vcons h t) v -> P h.
-Proof. by move=> H1 H2; apply/H1/H2; left. Defined.
-
-Definition fmap_ A B (P : A -> Prop)
-           (f : forall x, P x -> B) n (v : vec A n) (H : VAll P v) : vec B n
-  := (cofix m n (v' : vec A n) (M : vec_le v' v) :=
-          match v' in vec _ m return vec_le v' v -> vec B m with
-          | vnil => fun=> vnil B
-          | vcons h _ t =>
-            fun M => vcons (f _ (H _ (vec_le_hd M)))
-                           (m _ t (vec_le_tl M))
-          end M) n v (member_refl v).
 
 Section Definitions.
   (****************************************************************************)
@@ -157,149 +19,29 @@ Section Definitions.
   (****************************************************************************)
   Context (F : Type). (* Shape *)
   Context (P : F -> Type). (* Positions *)
-  (* Context (occ : F -> nat). (* Number of positions *) *)
-  (* Definition OCC (V : Type -> nat -> Type) X (x : F) := V X (occ x). *)
   Definition App X := {sh : F & P sh -> X}.
-  (* Coercion c_shape X (a : CApp X) : F := projT1 (P:=OCC vec X) a. *)
-  (* Coercion c_cont X  (a : CApp X) : OCC vec X (c_shape a) *)
-  (*   := projT2 (P:=OCC vec X) a. *)
 
-  (* Definition IApp X := {sh : F & OCC Vector.t X sh}. *)
-  (* Coercion i_shape X (a : IApp X) : F := projT1 (P:=OCC Vector.t X) a. *)
-  (* Coercion i_cont X (a : IApp X) : OCC Vector.t X (i_shape a) *)
-  (*   := projT2 (P:=OCC Vector.t X) a. *)
+  Inductive AppR X Y (r : X -> Y -> Prop) : App X -> App Y -> Prop :=
+  | AppR_fold sh c1 c2 :
+      (forall x : P sh, r (c1 x) (c2 x)) ->
+      AppR r (existT _ sh c1) (existT _ sh c2).
+  Hint Constructors AppR : gfix.
 
-  (* Definition to_capp A (v : IApp A) : CApp A := *)
-  (*   existT _ (i_shape v) (ivec_to_cvec (i_cont v)). *)
-  (* Definition to_iapp A (v : CApp A) : IApp A := *)
-  (*   existT _ (c_shape v) (cvec_to_ivec (c_cont v)). *)
+  Definition app_id X (x : App X) : App X :=
+    match x with
+    | existT _ c => existT _ _ c
+    end.
 
-  (* Lemma to_capp_iapp A : to_capp (A:= A) \o to_iapp (A := A) =1 id. *)
-  (* Proof. by case=>sh cn; rewrite /to_capp/to_iapp/= iso_ci_vec_r. Qed. *)
+  Definition fmap A B (f : A -> B) (x : {sh : F & P sh -> A})
+    : {sh : F & P sh -> B}
+    := existT _ _ (f \o projT2 x).
 
-  (* Lemma to_iapp_capp A : to_iapp (A:= A) \o to_capp (A := A) =1 id. *)
-  (* Proof. by case=>sh cn; rewrite /to_capp/to_iapp/= iso_ci_vec_l. Qed. *)
+  Lemma fmap_id A : fmap id =1 id :> (App A -> App A).
+  Proof. by case. Qed.
 
-  (* (* Parameter strict : forall X, F X -> IApp X. *) *)
-  (* (* Arguments strict [X] f_x. *) *)
-
-  (* (* Parameter un_strict : forall X, IApp X -> F X. *) *)
-  (* (* Arguments un_strict [X] a_x. *) *)
-
-  (* (* Axiom un_strict_strict : forall X, un_strict (X:=X) \o strict (X:=X) =1 id. *) *)
-  (* (* Axiom strict_un_strict : forall X, strict (X:=X) \o un_strict (X:=X) =1 id. *) *)
-
-  (* Inductive CVec_All (A : Type) (P : A -> Prop) *)
-  (*   : forall n, vec A n -> Prop := *)
-  (* | vnil_a : *)
-  (*     CVec_All P (vnil A) *)
-  (* | vcons_a n h t : *)
-  (*     P h -> *)
-  (*     CVec_All P t -> *)
-  (*     CVec_All P (@vcons A h n t) *)
-  (* . *)
-  (* Hint Constructors CVec_All : gfix. *)
-
-  (* Lemma vec_0_is_nil_ T n (v : vec T n) *)
-  (*   : match n return vec T n -> Prop with *)
-  (*     | O => fun v => v = vnil T *)
-  (*     | _ => fun _ => True *)
-  (*     end v. *)
-  (* Proof. by case: v. Qed. *)
-
-  (* Lemma vec_0_nil T (v : vec T 0) : v = vnil T. *)
-  (* Proof. by apply/(vec_0_is_nil_ v). Qed. *)
-
-  (* Derive Dependent Inversion cvec_all_inv *)
-  (*   with (forall A (P : A -> Prop) n (v : vec A n), CVec_All P v) Sort Prop. *)
-
-  (* (* Definition vec_all_cons (A : Type) (P : A -> Prop) h n (v : vec A n) *) *)
-  (* (*       (x : CVec_All P (vcons h v)) : P h /\ CVec_All P v := *) *)
-
-  (* Inductive CVec_R (A B : Type) (P : A -> B -> Prop) *)
-  (*   : forall n m, vec A n -> vec B m -> Prop := *)
-  (* | vnil_r : *)
-  (*     CVec_R P (vnil A) (vnil B) *)
-  (* | vcons_r n m h1 h2 t1 t2 : *)
-  (*     P h1 h2 -> *)
-  (*     CVec_R P t1 t2 -> *)
-  (*     CVec_R P (@vcons A h1 n t1) (@vcons B h2 m t2) *)
-  (* . *)
-  (* Hint Constructors CVec_R : gfix. *)
-
-  (* Derive Dependent Inversion cvec_r_inv *)
-  (*   with (forall (A B : Type) (P : A -> B -> Prop) *)
-  (*                n m (v1 : vec A n) (v2 : vec B m), CVec_R P v1 v2) *)
-  (*        Sort Prop. *)
-
-  (* Lemma cvec_r_refl (A : Type) n (v : vec A n) : CVec_R eq v v. *)
-  (* Proof. by elim: v =>[|h m t IH]; eauto with gfix. Qed. *)
-
-  (* Lemma vec_nil_cons A B (P : A -> B -> Prop) n (v : vec A n) h *)
-  (*   : ~ CVec_R P (vcons h v) (vnil B). *)
-  (* Proof. by elim/cvec_r_inv. Qed. *)
-
-  (* Definition IVec_R (A B : Type) (P : A -> B -> Prop) *)
-  (*   : forall n m (v1 : Vector.t A n) (v2 : Vector.t B m), Prop *)
-  (*   :=  fix f n m v1 v2 {struct v1} *)
-  (*         := match v1, v2 with *)
-  (*            | Vector.nil, Vector.nil => True *)
-  (*            | Vector.cons h1 n1 t1, Vector.cons h2 n2 t2 *)
-  (*              => P h1 h2 /\ f _ _ t1 t2 *)
-  (*            | _, _ => False *)
-  (*            end. *)
-  (* (* Hint Constructors IVec_R : gfix. *) *)
-
-  (* Definition IApp_R X Y (r : X -> Y -> Prop) (f : IApp X) (g : IApp Y) := *)
-  (*   i_shape f = i_shape g /\ IVec_R r (i_cont f) (i_cont g). *)
-  (* Hint Unfold IApp_R : gfix. *)
-  (* Hint Extern 1 => *)
-  (* match goal with *)
-  (* | [ |- context[IApp_R] ] => rewrite /IApp_R/= *)
-  (* end : gfix. *)
-
-  (* Definition CApp_R X Y (r : X -> Y -> Prop) (f : CApp X) (g : CApp Y) := *)
-  (*   c_shape f = c_shape g /\ CVec_R r (c_cont f) (c_cont g). *)
-  (* Hint Unfold CApp_R : gfix. *)
-  (* Hint Extern 1 => *)
-  (* match goal with *)
-  (* | [ |- context[CApp_R] ] => rewrite /CApp_R/= *)
-  (* end : gfix. *)
-
-  (* Lemma IApp_R_mon X Y (x : IApp X) (y : IApp Y) (r r' : X -> Y -> Prop) : *)
-  (*   IApp_R r x y -> (forall ex ey, r ex ey -> r' ex ey) -> IApp_R r' x y. *)
-  (* Proof. *)
-  (*   rewrite /IApp_R/i_cont/shape/==>[[E_sh E_cn] H]; split=>//. *)
-  (*   move: (projT2 x) (projT2 y) E_cn; rewrite /OCC. *)
-  (*   move: (occ _) (occ _)=> n2 n1 v1 v2. *)
-  (*   by elim: v1 n2 v2=>[|h1 m1 t1 Ih] n2; case=>[|h2 m2 t2]/= []; eauto with gfix. *)
-  (* Qed. *)
-  (* Hint Resolve IApp_R_mon : gfix. *)
-
-  (* Lemma CApp_R_mon X Y (x : CApp X) (y : CApp Y) (r r' : X -> Y -> Prop) : *)
-  (*   CApp_R r x y -> (forall ex ey, r ex ey -> r' ex ey) -> CApp_R r' x y. *)
-  (* Proof. *)
-  (*   rewrite /CApp_R/c_cont/shape/==>[[E_sh E_cn] H]; split=>//. *)
-  (*   move: (projT2 x) (projT2 y) E_cn; rewrite /OCC. *)
-  (*   move: (occ _) (occ _)=> n2 n1 v1 v2. *)
-  (*   by elim; eauto with gfix. *)
-  (* Qed. *)
-  (* Hint Resolve CApp_R_mon : gfix. *)
-
-  (* Definition i_fmap X Y (f : X -> Y) (x : IApp X) : IApp Y *)
-  (*   := existT _ _ (Vector.map f (i_cont x)). *)
-  (* Hint Unfold i_fmap : gfix. *)
-
-  (* Definition c_fmap X Y (f : X -> Y) (x : CApp X) : CApp Y *)
-  (*   := existT _ _ (vmap f (c_cont x)). *)
-  (* Hint Unfold c_fmap : gfix. *)
-
-  (* Lemma fmapI X n : vmap (A:=X) (n:=n) id =1 id. *)
-  (* Proof. by elim=>[|h t v Ih]; eauto with gfix; rewrite vmap_cons Ih. Qed. *)
-
-  (* Lemma fmap_comp X Y Z (f : X -> Y) (g : Y -> Z) n *)
-  (*   : Vector.map (n:=n) g \o Vector.map (n:=n) f =1 Vector.map (n:=n) (g \o f). *)
-  (* Proof. by elim=>[|h t v Ih]//=; rewrite -Ih. Qed. *)
+  Lemma fmap_comp A B C (g : B -> C) (f : A -> B)
+    : fmap g \o fmap f = fmap (g \o f).
+  Proof. by []. Qed.
 
   (****************************************************************************)
   (** Greatest fixpoints                                                     **)
@@ -320,6 +62,33 @@ Section Definitions.
   Proof. by case. Qed.
   Lemma g_out_in : g_out \o g_in =1 id.
   Proof. by case. Qed.
+
+  Inductive LFix : Type
+    := L_fold (sh : F) (rec : P sh -> LFix). (* vec GFix (occ sh)). *)
+  Hint Constructors LFix : gfix.
+  Definition l_shape x := match x with | L_fold f _ => f end.
+  Definition l_cont x : P (l_shape x) -> LFix :=
+    match x with | L_fold _ f => f end.
+  Arguments l_cont x : clear implicits.
+
+  Definition l_in  (x : App LFix) := L_fold (projT2 x).
+  Definition l_out (x : LFix) : App LFix := existT _ _ (l_cont x).
+
+  Lemma l_in_out : l_in \o l_out =1 id.
+  Proof. by case. Qed.
+  Lemma l_out_in : l_out \o l_in =1 id.
+  Proof. by case. Qed.
+
+  Definition cata A (g : App A -> A) : LFix -> A
+    := fix f x :=
+         match x with
+         | L_fold sh_x c_x => g (existT _ sh_x (f \o c_x))
+         end.
+
+  Goal cata l_in =1 id.
+  elim=>[sh p]/=; rewrite /l_in/==>Ih.
+  congr L_fold.
+  Abort.
 
   (* Definition GFix_EQ_ (r : GFix -> GFix -> Prop) (gl gr : GFix) : Prop := *)
   (*   CApp_R r (g_out gl) (g_out gr). *)
@@ -390,23 +159,20 @@ Section Definitions.
          | existT sh_x c_x => @G_fold sh_x (f \o c_x)
          end.
 
-  Definition f_map A B (f : A -> B) (x : {sh : F & P sh -> A}) : {sh : F & P sh -> B}
-    := existT _ _ (f \o projT2 x).
-
   Lemma ana_eq A (h : A -> {sh : F & P sh -> A}) :
-    g_out \o ana h =1 f_map (ana h) \o h.
+    g_out \o ana h =1 fmap (ana h) \o h.
   Proof. move=>x; rewrite /g_out/=; by case: (h x)=>/=. Qed.
 
   Corollary ana_unroll A (h : A -> {sh : F & P sh -> A}) :
-    ana h =1 g_in \o f_map (ana h) \o h.
+    ana h =1 g_in \o fmap (ana h) \o h.
   Proof.
-    move=>x; rewrite -(rw_comp g_in_out (ana _ _))/=.
-    by rewrite (rw_comp (ana_eq _) _).
+    move=>x; rewrite -(g_in_out (ana _ _))/=.
+    by move: (ana_eq h x)=>/=->.
   Qed.
 
   Goal ana g_out =1 id.
-    move=> x; rewrite ana_unroll/=.
-    rewrite /f_map/g_in/=.
+    move=> [c_s c_c]; rewrite ana_unroll/=.
+    rewrite /fmap/g_in/=.
 
   Lemma ana_univ_r A (h : A -> CApp A) (f : A -> GFix)
     : g_out \o f =1/a/g c_fmap f \o h -> f =1/g ana h.
