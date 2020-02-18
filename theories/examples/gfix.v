@@ -66,7 +66,7 @@ Definition vec_fold A (B : nat -> Type)
 Definition cvec_to_ivec A : forall n, vec A n -> Vector.t A n
   := vec_fold (Vector.cons A) (Vector.nil A).
 Fixpoint ivec_to_cvec A n (v : Vector.t A n)
-  := match v with
+ := match v with
      | Vector.nil => vnil A
      | Vector.cons h n t => vcons h (ivec_to_cvec t)
      end.
