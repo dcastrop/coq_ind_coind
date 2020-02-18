@@ -179,15 +179,6 @@ Section Definitions.
   Lemma to_iapp_capp A : to_iapp (A:= A) \o to_capp (A := A) =1 id.
   Proof. by case=>sh cn; rewrite /to_capp/to_iapp/= iso_ci_vec_l. Qed.
 
-  (* Parameter strict : forall X, F X -> IApp X. *)
-  (* Arguments strict [X] f_x. *)
-
-  (* Parameter un_strict : forall X, IApp X -> F X. *)
-  (* Arguments un_strict [X] a_x. *)
-
-  (* Axiom un_strict_strict : forall X, un_strict (X:=X) \o strict (X:=X) =1 id. *)
-  (* Axiom strict_un_strict : forall X, strict (X:=X) \o un_strict (X:=X) =1 id. *)
-
   Inductive CVec_All (A : Type) (P : A -> Prop)
     : forall n, vec A n -> Prop :=
   | vnil_a :
@@ -211,20 +202,6 @@ Section Definitions.
 
   Derive Dependent Inversion cvec_all_inv
     with (forall A (P : A -> Prop) n (v : vec A n), CVec_All P v) Sort Prop.
-
-  (* Definition vec_all_cons (A : Type) (P : A -> Prop) h n (v : vec A n) *)
-  (*       (x : CVec_All P (vcons h v)) : P h /\ CVec_All P v := *)
-
-  (* Inductive CVec_R (A B : Type) (P : A -> B -> Prop) *)
-  (*   : forall n m, vec A n -> vec B m -> Prop := *)
-  (* | vnil_r : *)
-  (*     CVec_R P (vnil A) (vnil B) *)
-  (* | vcons_r n m h1 h2 t1 t2 : *)
-  (*     P h1 h2 -> *)
-  (*     CVec_R P t1 t2 -> *)
-  (*     CVec_R P (@vcons A h1 n t1) (@vcons B h2 m t2) *)
-  (* . *)
-  (* Hint Constructors CVec_R : gfix. *)
 
   Definition CVec_R (A B : Type) (P : A -> B -> Prop)
     : forall n m (v1 : vec A n) (v2 : vec B m), Prop
@@ -252,18 +229,12 @@ Section Definitions.
     by elim: v1 m v2=>[|h1 m1 t1 Ih] m [|h2 m2 t2] //= []; eauto with gfix.
   Qed.
 
-  (* Derive Dependent Inversion cvec_r_inv *)
-  (*   with (forall (A B : Type) (P : A -> B -> Prop) *)
-  (*                n m (v1 : vec A n) (v2 : vec B m), CVec_R P v1 v2) *)
-  (*        Sort Prop. *)
-
   Lemma cvec_r_refl (A : Type) n (v : vec A n) : CVec_R eq v v.
   Proof. by elim: v =>[|h m t IH]; eauto with gfix. Qed.
 
   Lemma vec_nil_cons A B (P : A -> B -> Prop) n (v : vec A n) h
     : ~ CVec_R P (vcons h v) (vnil B).
   Proof. by []. Qed.
-      (* by elim/cvec_r_inv. Qed. *)
 
   Definition IVec_R (A B : Type) (P : A -> B -> Prop)
     : forall n m (v1 : Vector.t A n) (v2 : Vector.t B m), Prop
@@ -274,7 +245,6 @@ Section Definitions.
                => P h1 h2 /\ f _ _ t1 t2
              | _, _ => False
              end.
-  (* Hint Constructors IVec_R : gfix. *)
 
   Definition IApp_R X Y (r : X -> Y -> Prop) (f : IApp X) (g : IApp Y) :=
     i_shape f = i_shape g /\ IVec_R r (i_cont f) (i_cont g).
@@ -585,7 +555,6 @@ Section Definitions.
   Definition vecP A (P : A -> Prop) n
     := {x : vec A n | forall y, Member y x -> P y}.
 
-  (* Terminating anamorphisms *)
   Definition Term A (h : A -> IApp A) : A -> Prop
     := fun x => Fin (ana (to_capp (A:=A) \o h) x).
 
@@ -657,14 +626,28 @@ Section Definitions.
     by elim=>[|hv mv tv Ih]//= H; rewrite Ih f_ana_irr.
   Qed.
 
-  Lemma FinF_inv1 A (h : A -> IApp A) (sh : F) (c : OCC Vector.t A sh) (x : A)
-        : FinF h x -> existT _ sh c = h x -> IAll (FinF h) c.
+  Lemma f_ana_univ_l A (h : A -> IApp A) (T : forall x, FinF h x)
+        : forall f, f =1 f_ana T -> l_out \o f =1 i_fmap f \o h.
   Proof.
-    case=> {}x H E e M; apply/H.
-    by move: E M=><-/=.
-  Defined.
+    move=> f H x /=; rewrite (H x) f_ana_unr /= /i_fmap/=.
+    suff: forall e, Vector.map (f_ana T) e = Vector.map f e by move=>->.
+    by move=> n {x}; elim=>[|hx nx tx /= ->]//; rewrite (H _).
+  Qed.
 
-  Print i_fmap_.
+  Lemma f_ana_univ_r A (h : A -> IApp A) (T : forall x, FinF h x)
+        : forall f, l_out \o f =1 i_fmap f \o h -> f =1 f_ana T.
+  Proof.
+    move=>f H x; rewrite -(l_in_out (f x))/=; move: (H x)=>/=->.
+    move: (T x)=>/=; elim=>{}x; rewrite f_ana_unr/=; move: (h x)=>[sh_x c_x]/=.
+    move=> T_x Ih; congr L_fold; move: T_x Ih.
+    elim: c_x=>[|h_x n_x t_x IhV]//= T_x Ih.
+    rewrite -(l_in_out (f h_x))/=; move: (H h_x)=>/=->; rewrite /=Ih; auto.
+    by rewrite IhV // => {}x M; apply/Ih; right.
+  Qed.
+
+  Lemma f_ana_univ A (h : A -> IApp A) (T : forall x, FinF h x)
+        : forall f, f =1 f_ana T <-> l_out \o f =1 i_fmap f \o h.
+  Proof. by move=>f; split; [apply/f_ana_univ_l|apply/f_ana_univ_r]. Qed.
 
   Definition f_hylo_ A B (g : IApp B -> B) (h : A -> IApp A)
     : forall x, FinF h x -> B
@@ -703,6 +686,35 @@ Section Definitions.
     rewrite /OCC/=; move: {-3 5 7}(occ s_x)=>n.
     by elim=>[|hv mv tv Ih]//= H; rewrite Ih f_hylo_irr.
   Qed.
+
+  Lemma f_hylo_univ_l A B (g : IApp B -> B) (h : A -> IApp A)
+        (T : forall x, FinF h x)
+    : forall f, f =1 f_hylo g h T -> f =1 g \o i_fmap f \o h.
+  Proof.
+    move=>f H x; rewrite (H x) f_hylo_unr/=.
+    suff: forall v, i_fmap (f_hylo g h T) v = i_fmap f v by move=>->.
+    move=>[sh_x c_x]; rewrite /i_fmap/=.
+    suff: forall v, Vector.map (f_hylo g h T) v = Vector.map f v by move=>->.
+    move=>n; elim=>[|h_x n_x t_x /=->]//=; eauto with gfix.
+    by rewrite H.
+  Qed.
+
+  Lemma f_hylo_univ_r A B (g : IApp B -> B) (h : A -> IApp A)
+        (T : forall x, FinF h x)
+    : forall f, f =1 g \o i_fmap f \o h -> f =1 f_hylo g h T.
+  Proof.
+    move=> f H x; move: (T x); elim=>{}x.
+    rewrite H f_hylo_unr/=; move: (h x)=>[sh_x c_x]//= {x} T_x Ih.
+    rewrite /i_fmap/=.
+    suff: Vector.map f c_x = Vector.map (f_hylo g h T) c_x by move=>->.
+    elim: c_x =>[|h_x n_x t_x IhV]//= in T_x Ih *.
+    by rewrite Ih; auto; rewrite IhV// => e M; apply/Ih; auto.
+  Qed.
+
+  Lemma f_hylo_univ A B (g : IApp B -> B) (h : A -> IApp A)
+        (T : forall x, FinF h x)
+    : forall f, f =1 f_hylo g h T <-> f =1 g \o i_fmap f \o h.
+  Proof. by move=>f; split; [apply/f_hylo_univ_l|apply/f_hylo_univ_r]. Qed.
 
   (****************************************************************************)
   (** "Finite Greatest Fixpoints"                                            **)
@@ -751,7 +763,6 @@ End Definitions.
 
 Notation "x =l y" := (LFix_EQ x y) : type_scope.
 Notation "x =g y" := (GFix_EQ x y) : type_scope.
-(* Notation "'g_in'" := G_in (at level 0). *)
 
 Module ExInfTree.
 
@@ -860,7 +871,6 @@ Module QSort.
   Qed.
 
   Definition spl1 := f_ana p_split_terminates.
-  (* Definition spl2 := ana p_split_. *)
   Definition app : LFix (tree_occ nat) -> seq nat := cata p_merge.
 
   Definition qsort : list nat -> list nat := f_hylo p_merge p_split_terminates.
