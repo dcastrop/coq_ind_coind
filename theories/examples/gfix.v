@@ -1,5 +1,6 @@
 From mathcomp Require Import all_ssreflect.
 From Paco Require Import paco paco2.
+Require Import Setoid.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -150,6 +151,38 @@ Definition fmap_ A B (P : A -> Prop)
                            (m _ t (vec_le_tl M))
           end M) n v (member_refl v).
 
+Lemma map_ext_eq A B (f g : A -> B)
+  : f =1 g -> forall n, Vector.map (n:=n) f =1 Vector.map g.
+Proof. by move=> H n; elim=>[|h m t /=->]//; rewrite H. Qed.
+
+Fixpoint In A (x : A) n (v : Vector.t A n) : Prop :=
+  match v with
+  | Vector.nil => False
+  | Vector.cons h _ t => x = h \/ In x t
+  end.
+
+Definition ivec_le A n m (v : Vector.t A n) (v' : Vector.t A m)
+  := forall (y : A), In y v -> In y v'.
+
+Lemma in_refl A n (v : Vector.t A n) : ivec_le v v.
+Proof. by []. Qed.
+Arguments in_refl [A n] v.
+
+Lemma ivec_le_hd A n (v : Vector.t A n) (h : A) m (t : Vector.t A m) :
+  ivec_le (Vector.cons _ h _ t) v -> In h v.
+Proof. by move=>/(_ h (or_introl erefl)). Qed.
+
+Lemma ivec_le_tl A n (v : Vector.t A n) (h : A) m (t : Vector.t A m) :
+  ivec_le (Vector.cons _ h _ t) v -> ivec_le t v.
+Proof. by move=>H x M; apply/H/or_intror/M. Qed.
+
+Lemma map_eq A B (f g : A -> B) n (v : Vector.t A n)
+  : (forall e, In e v -> f e = g e) -> Vector.map f v = Vector.map g v.
+Proof.
+  elim: v=>[|h m t /=Ih]// H.
+  by rewrite H; auto; rewrite Ih// => e M; apply/H; right.
+Qed.
+
 Section Definitions.
   (****************************************************************************)
   (** Assumptions and Strict positivisation of functors, using vectors as    **)
@@ -284,6 +317,21 @@ Section Definitions.
   Definition i_fmap X Y (f : X -> Y) (x : IApp X) : IApp Y
     := existT _ _ (Vector.map f (i_cont x)).
   Hint Unfold i_fmap : gfix.
+
+  Lemma i_fmap_id X : i_fmap (X:=X) id =1 id.
+  Proof.
+    case=>sh_x c_x; rewrite /i_fmap/=.
+    suff: Vector.map id c_x = c_x by move=>->.
+    by elim: c_x=>[|h m t /=->]; auto.
+  Qed.
+
+  Lemma i_fmap_comp X Y Z (f : X -> Y) (g : Y -> Z)
+    : i_fmap g \o i_fmap f =1 i_fmap (g \o f).
+  Proof.
+    case=>sh_x c_x; rewrite /i_fmap/=.
+    suff: Vector.map g (Vector.map f c_x) = Vector.map (g \o f) c_x by move=>->.
+    by elim: c_x=>[|h m t /=->]; auto.
+  Qed.
 
   Definition c_fmap X Y (f : X -> Y) (x : CApp X) : CApp Y
     := existT _ _ (vmap f (c_cont x)).
@@ -454,12 +502,6 @@ Section Definitions.
     := L_fold (sh : F) (c : Vector.t LFix (occ sh)).
   Set Elimination Schemes.
 
-  Fixpoint In A (x : A) n (v : Vector.t A n) : Prop :=
-    match v with
-    | Vector.nil => False
-    | Vector.cons h _ t => x = h \/ In x t
-    end.
-
   Lemma LFix_ind
         (P : LFix -> Prop)
         (P_fold : forall (sh : F) (c : Vector.t LFix (occ sh)),
@@ -559,7 +601,7 @@ Section Definitions.
     := fun x => Fin (ana (to_capp (A:=A) \o h) x).
 
   Definition IAll A (P : A -> Prop) :=
-    fun n (x : Vector.t A n) => forall e, Member e (ivec_to_cvec x) -> P e.
+    fun n (x : Vector.t A n) => forall e, In e x -> P e.
 
   Inductive FinF A (h : A -> IApp A) : A -> Prop :=
   | FinF_fold x : IAll (FinF h) (i_cont (h x)) -> FinF h x.
@@ -574,9 +616,6 @@ Section Definitions.
                (FinF_inv (proj2_sig x)).
   Arguments wrap [A] h.
 
-  Definition ivec_le A m n (v' : Vector.t A m) (v : Vector.t A n) :=
-    vec_le (ivec_to_cvec v') (ivec_to_cvec v).
-
   Definition i_fmap' A B (P : A -> Prop) (f : forall p : A, P p -> B)
              m (v : Vector.t A m) (H : IAll P v) :
     forall n (v' : Vector.t A n), ivec_le v' v -> Vector.t B n
@@ -585,13 +624,13 @@ Section Definitions.
                return ivec_le v' v -> Vector.t B m with
          | Vector.nil => fun=> Vector.nil _
          | Vector.cons h _ t =>
-           fun M => Vector.cons _ (f _ (H _ (vec_le_hd M)))
-                                _ (m _ t (vec_le_tl M))
+           fun M => Vector.cons _ (f _ (H _ (ivec_le_hd M)))
+                                _ (m _ t (ivec_le_tl M))
          end.
 
   Definition i_fmap_ A B (P : A -> Prop) (f : forall p : A, P p -> B)
              n (v : Vector.t A n) (H : IAll P v) : Vector.t B n
-    := i_fmap' f H (member_refl (ivec_to_cvec v)).
+    := i_fmap' f H (in_refl v).
 
   Definition fmap_I A B (P : A -> Prop) (f : forall p, P p -> B)
              (x : sig (fun x => IAll P (i_cont x))) : IApp B
@@ -606,10 +645,10 @@ Section Definitions.
   Proof.
     move: x F1 F2; fix Ih 2; move=> x [{}x H1] F2; move:F2 H1=>[{}x H2] H1/=.
     congr L_fold; rewrite /i_fmap_/=.
-    move: {1 4 6}(i_cont (h x)) (member_refl _).
-    rewrite /OCC; move: {-3 5 7 9} (occ (h x)) => n.
+    move: {1 4 6}(i_cont (h x)) (in_refl _).
+    rewrite /OCC; move: {-3 5 7} (occ (h x)) => n.
     elim=>[|hv mv tv IhL]//= M.
-    by rewrite (Ih _ (H1 _ _) (H2 _ (vec_le_hd M))) IhL.
+    by rewrite (Ih _ (H1 _ _) (H2 _ (ivec_le_hd M))) IhL.
   Qed.
 
   Definition f_ana A (h : A -> IApp A) (T : forall x, FinF h x) x : LFix
@@ -621,8 +660,8 @@ Section Definitions.
     rewrite /f_ana/wrap/==>x.
     move: (T x)=> [{}x ALL]/=; congr L_fold.
     rewrite /fmap_I/i_fmap/i_fmap_/=.
-    move: {-2 3}(i_cont (h x)) (member_refl _).
-    rewrite /OCC/=; move: {-3 5 7}(occ (h x))=>n.
+    move: {-2 3}(i_cont (h x)) (in_refl _).
+    rewrite /OCC/=; move: {-3 5}(occ (h x))=>n.
     by elim=>[|hv mv tv Ih]//= H; rewrite Ih f_ana_irr.
   Qed.
 
@@ -663,10 +702,10 @@ Section Definitions.
     fix Ih 2; move=> x.
     case=>[{}x H1] F2; case: F2 H1=>[{}x H2] H1/=.
     move: (h x) H2 H1; case=>/= x0 p H2 H1; congr g; congr existT.
-    rewrite /i_fmap_; move: {1 4 6}p (member_refl _).
-    rewrite /OCC; move: {-3 5 7 9} (occ x0) => n.
+    rewrite /i_fmap_; move: {1 4 6}p (in_refl _).
+    rewrite /OCC; move: {-3 5 7} (occ x0) => n.
     elim=>[|hv mv tv IhL]//= M.
-    by rewrite IhL (Ih _ (H1 _ (vec_le_hd M)) (H2 _ (vec_le_hd M))).
+    by rewrite IhL (Ih _ (H1 _ (ivec_le_hd M)) (H2 _ (ivec_le_hd M))).
   Qed.
 
   Definition f_hylo A B (g : IApp B -> B) (h : A -> IApp A)
@@ -682,8 +721,8 @@ Section Definitions.
     move: (T x)=> [{}x ALL]/=.
     move: (h x) ALL; case=>/= s_x c_x ALL; congr g.
     rewrite /fmap_I/i_fmap/i_fmap_/=; congr existT.
-    move: {-2 3}c_x (member_refl _).
-    rewrite /OCC/=; move: {-3 5 7}(occ s_x)=>n.
+    move: {-2 3}c_x (in_refl _).
+    rewrite /OCC/=; move: {-3 5}(occ s_x)=>n.
     by elim=>[|hv mv tv Ih]//= H; rewrite Ih f_hylo_irr.
   Qed.
 
@@ -715,6 +754,33 @@ Section Definitions.
         (T : forall x, FinF h x)
     : forall f, f =1 f_hylo g h T <-> f =1 g \o i_fmap f \o h.
   Proof. by move=>f; split; [apply/f_hylo_univ_l|apply/f_hylo_univ_r]. Qed.
+
+  Lemma fin_out : forall x, FinF l_out x.
+  Proof.
+    elim=> sh_x c_x Ih; constructor=>/=.
+    by case: c_x =>[|h_x n_x t_x] in Ih *; auto.
+  Qed.
+
+  Lemma f_hylo_cata A (g : IApp A -> A)
+    : cata g =1 f_hylo g l_out fin_out.
+  Proof. elim=>//= sh_x c_x Ih; by rewrite f_hylo_unr/i_fmap/= (map_eq Ih). Qed.
+
+  Lemma f_hylo_ana A (h : A -> IApp A) (T : forall x, FinF h x)
+    : f_ana T =1 f_hylo l_in h T.
+  Proof.
+    move=>x;move:(T x);elim =>e _ Ih.
+    by rewrite f_ana_unr f_hylo_unr/= (map_eq Ih).
+  Qed.
+
+  Lemma f_hylo_fuse A B C (h1 : A -> IApp A) (H1 : forall x, FinF h1 x)
+        (g1 : IApp B -> B) (h2 : B -> IApp B) (H2 : forall x, FinF h2 x)
+        (g2 : IApp C -> C)
+    : h2 \o g1 =1 id -> f_hylo g2 h2 H2 \o f_hylo g1 h1 H1 =1 f_hylo g2 h1 H1.
+  Proof.
+    move=> H/=; rewrite f_hylo_univ => x/=.
+    rewrite [f_hylo g2 _ _ _]f_hylo_unr [f_hylo g1 _ _ _]f_hylo_unr/=.
+    by rewrite (rw_comp H) (rw_comp (i_fmap_comp _ _)).
+  Qed.
 
   (****************************************************************************)
   (** "Finite Greatest Fixpoints"                                            **)
