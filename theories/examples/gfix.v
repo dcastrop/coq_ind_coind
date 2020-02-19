@@ -761,25 +761,54 @@ Section Definitions.
     by case: c_x =>[|h_x n_x t_x] in Ih *; auto.
   Qed.
 
+  Add Parametric Relation (A B:Type) : (A -> B) (@eqfun B A)
+      reflexivity proved by (@frefl B A)
+      symmetry proved by (@fsym B A)
+      transitivity proved by (@ftrans B A)
+        as ExtEq.
+
+  Add Parametric Morphism A B C : (@comp C B A) with
+        signature (@eqfun C B) ==> eq ==> (@eqfun C A)
+        as compMorphism_l.
+  Proof. by move=> f1 f2 g h x =>/=; rewrite g. Qed.
+
+  Add Parametric Morphism A B C : (@comp C B A) with
+        signature eq ==> (@eqfun B A) ==> (@eqfun C A)
+        as compMorphism_r.
+  Proof. by move=> f g1 g2 h x =>/=; rewrite h. Qed.
+
   Lemma f_hylo_cata A (g : IApp A -> A)
     : cata g =1 f_hylo g l_out fin_out.
-  Proof. elim=>//= sh_x c_x Ih; by rewrite f_hylo_unr/i_fmap/= (map_eq Ih). Qed.
+  Proof. by rewrite f_hylo_univ [in H in H =1 _]cata_unroll. Qed.
 
   Lemma f_hylo_ana A (h : A -> IApp A) (T : forall x, FinF h x)
     : f_ana T =1 f_hylo l_in h T.
-  Proof.
-    move=>x;move:(T x);elim =>e _ Ih.
-    by rewrite f_ana_unr f_hylo_unr/= (map_eq Ih).
-  Qed.
+  Proof. by rewrite f_hylo_univ [in H in H =1 _]f_ana_unr. Qed.
+
+  Lemma comp_idl A B (f : A -> B) : f \o id =1 f.
+  Proof. by []. Qed.
+
+  Lemma comp_idr A B (f : A -> B) : id \o f = f.
+  Proof. by []. Qed.
+
+  Lemma comp_assoc  D C B A (f : D -> C) (g : C -> B) (h : B -> A) :
+    h \o (g \o f) = (h \o g) \o f.
+  Proof. by []. Qed.
 
   Lemma f_hylo_fuse A B C (h1 : A -> IApp A) (H1 : forall x, FinF h1 x)
         (g1 : IApp B -> B) (h2 : B -> IApp B) (H2 : forall x, FinF h2 x)
-        (g2 : IApp C -> C)
-    : h2 \o g1 =1 id -> f_hylo g2 h2 H2 \o f_hylo g1 h1 H1 =1 f_hylo g2 h1 H1.
+        (g2 : IApp C -> C) (INV: h2 \o g1 =1 id)
+    : f_hylo g2 h2 H2 \o f_hylo g1 h1 H1 =1 f_hylo g2 h1 H1.
   Proof.
-    move=> H/=; rewrite f_hylo_univ => x/=.
-    rewrite [f_hylo g2 _ _ _]f_hylo_unr [f_hylo g1 _ _ _]f_hylo_unr/=.
-    by rewrite (rw_comp H) (rw_comp (i_fmap_comp _ _)).
+    rewrite f_hylo_univ.
+    rewrite [in H in _ \o H =1 _]f_hylo_unr [in H in H \o _ =1 _]f_hylo_unr.
+    do 3 (rewrite -comp_assoc); rewrite comp_assoc [in H in _ \o H =1 _]comp_assoc.
+    rewrite INV.
+    rewrite comp_idr.
+    rewrite comp_assoc.
+    rewrite -[in H in H \o _ =1 _]comp_assoc.
+    rewrite i_fmap_comp.
+    reflexivity.
   Qed.
 
   (****************************************************************************)
