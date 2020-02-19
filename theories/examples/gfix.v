@@ -772,6 +772,16 @@ Section Definitions.
         as compMorphism.
   Proof. by move=> f1 f2 E1 g1 g2 E2 x =>/=; rewrite E1 E2. Qed.
 
+  Add Parametric Morphism A B n : (fun f => @Vector.map A B f n) with
+        signature (@eqfun B A) ==> (@eqfun (Vector.t B n) (Vector.t A n))
+        as ivmapMorphism.
+  Proof. by move=> f g E; apply/map_ext_eq. Qed.
+
+  Add Parametric Morphism A B : (@i_fmap A B) with
+        signature (@eqfun B A) ==> (@eqfun (IApp B) (IApp A))
+        as fmapMorphism.
+  Proof. by move=> f g E; rewrite /i_fmap/==>x; rewrite (map_ext_eq E). Qed.
+
   Lemma f_hylo_cata A (g : IApp A -> A)
     : cata g =1 f_hylo g l_out fin_out.
   Proof. by rewrite f_hylo_univ [in H in H =1 _]cata_unroll. Qed.
@@ -787,7 +797,7 @@ Section Definitions.
   Proof. by []. Qed.
 
   Lemma comp_assoc  D C B A (f : D -> C) (g : C -> B) (h : B -> A) :
-    h \o (g \o f) = (h \o g) \o f.
+    h \o (g \o f) =1 (h \o g) \o f.
   Proof. by []. Qed.
 
   Lemma f_hylo_fuse A B C (h1 : A -> IApp A) (H1 : forall x, FinF h1 x)
@@ -796,11 +806,11 @@ Section Definitions.
     : f_hylo g2 h2 H2 \o f_hylo g1 h1 H1 =1 f_hylo g2 h1 H1.
   Proof.
     rewrite f_hylo_univ.
-    rewrite [in H in _ \o H =1 _]f_hylo_unr [in H in H \o _ =1 _]f_hylo_unr.
-    rewrite comp_assoc comp_assoc -[in H in H \o _ \o _ =1 _]comp_assoc.
-    rewrite INV.
-    rewrite comp_idl -[in H in H \o h1 =1 _]comp_assoc.
-    rewrite i_fmap_comp.
+    rewrite -i_fmap_comp.
+    rewrite [in H in _ =1 H]comp_assoc -comp_assoc.
+    rewrite -(comp_idr (_ \o h1)) -INV.
+    rewrite -[in H in _ =1 _ \o H]comp_assoc comp_assoc [in H in _ =1 _ \o H]comp_assoc.
+    rewrite -f_hylo_unr -f_hylo_unr.
     reflexivity.
   Qed.
 
