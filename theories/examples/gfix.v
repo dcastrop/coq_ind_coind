@@ -711,48 +711,48 @@ Section Definitions.
   Definition f_hylo A B (g : IApp B -> B) (h : A -> IApp A)
              (T : forall x, FinF h x)
     : A -> B := fun x => f_hylo_ g h (T x).
-  Arguments f_hylo [A B] g h T.
+  Arguments f_hylo [A B] g [h] T.
 
   Lemma f_hylo_unr A B (g : IApp B -> B) (h : A -> IApp A)
-        (T : forall x, FinF h x)
-    : f_hylo g h T =1 g \o i_fmap (f_hylo g h T) \o h.
+        (H : forall x, FinF h x)
+    : f_hylo g H =1 g \o i_fmap (f_hylo g H) \o h.
   Proof.
     rewrite /f_hylo=>x/=.
-    move: (T x)=> [{}x ALL]/=.
+    move: (H x)=> [{}x ALL]/=.
     move: (h x) ALL; case=>/= s_x c_x ALL; congr g.
     rewrite /fmap_I/i_fmap/i_fmap_/=; congr existT.
     move: {-2 3}c_x (in_refl _).
     rewrite /OCC/=; move: {-3 5}(occ s_x)=>n.
-    by elim=>[|hv mv tv Ih]//= H; rewrite Ih f_hylo_irr.
+    by elim=>[|hv mv tv Ih]//= R; rewrite Ih f_hylo_irr.
   Qed.
 
   Lemma f_hylo_univ_l A B (g : IApp B -> B) (h : A -> IApp A)
         (T : forall x, FinF h x)
-    : forall f, f =1 f_hylo g h T -> f =1 g \o i_fmap f \o h.
+    : forall f, f =1 f_hylo g T -> f =1 g \o i_fmap f \o h.
   Proof.
     move=>f H x; rewrite (H x) f_hylo_unr/=.
-    suff: forall v, i_fmap (f_hylo g h T) v = i_fmap f v by move=>->.
+    suff: forall v, i_fmap (f_hylo g T) v = i_fmap f v by move=>->.
     move=>[sh_x c_x]; rewrite /i_fmap/=.
-    suff: forall v, Vector.map (f_hylo g h T) v = Vector.map f v by move=>->.
+    suff: forall v, Vector.map (f_hylo g T) v = Vector.map f v by move=>->.
     move=>n; elim=>[|h_x n_x t_x /=->]//=; eauto with gfix.
     by rewrite H.
   Qed.
 
   Lemma f_hylo_univ_r A B (g : IApp B -> B) (h : A -> IApp A)
         (T : forall x, FinF h x)
-    : forall f, f =1 g \o i_fmap f \o h -> f =1 f_hylo g h T.
+    : forall f, f =1 g \o i_fmap f \o h -> f =1 f_hylo g T.
   Proof.
     move=> f H x; move: (T x); elim=>{}x.
     rewrite H f_hylo_unr/=; move: (h x)=>[sh_x c_x]//= {x} T_x Ih.
     rewrite /i_fmap/=.
-    suff: Vector.map f c_x = Vector.map (f_hylo g h T) c_x by move=>->.
+    suff: Vector.map f c_x = Vector.map (f_hylo g T) c_x by move=>->.
     elim: c_x =>[|h_x n_x t_x IhV]//= in T_x Ih *.
     by rewrite Ih; auto; rewrite IhV// => e M; apply/Ih; auto.
   Qed.
 
   Lemma f_hylo_univ A B (g : IApp B -> B) (h : A -> IApp A)
         (T : forall x, FinF h x)
-    : forall f, f =1 f_hylo g h T <-> f =1 g \o i_fmap f \o h.
+    : forall f, f =1 f_hylo g T <-> f =1 g \o i_fmap f \o h.
   Proof. by move=>f; split; [apply/f_hylo_univ_l|apply/f_hylo_univ_r]. Qed.
 
   Lemma fin_out : forall x, FinF l_out x.
@@ -783,12 +783,12 @@ Section Definitions.
   Proof. by move=> f g E; rewrite /i_fmap/==>x; rewrite (map_ext_eq E). Qed.
 
   Lemma f_hylo_cata A (g : IApp A -> A)
-    : cata g =1 f_hylo g l_out fin_out.
-  Proof. by rewrite f_hylo_univ [in H in H =1 _]cata_unroll. Qed.
+    : cata g =1 f_hylo g fin_out.
+  Proof. by rewrite f_hylo_univ -cata_unroll. Qed.
 
-  Lemma f_hylo_ana A (h : A -> IApp A) (T : forall x, FinF h x)
-    : f_ana T =1 f_hylo l_in h T.
-  Proof. by rewrite f_hylo_univ [in H in H =1 _]f_ana_unr. Qed.
+  Lemma f_hylo_ana A (h : A -> IApp A) (H : forall x, FinF h x)
+    : f_ana H =1 f_hylo l_in H.
+  Proof. by rewrite f_hylo_univ -f_ana_unr. Qed.
 
   Lemma comp_idl A B (f : A -> B) : f \o id =1 f.
   Proof. by []. Qed.
@@ -797,20 +797,26 @@ Section Definitions.
   Proof. by []. Qed.
 
   Lemma comp_assoc  D C B A (f : D -> C) (g : C -> B) (h : B -> A) :
-    h \o (g \o f) =1 (h \o g) \o f.
+    h \o (g \o f) = (h \o g) \o f.
   Proof. by []. Qed.
+
+  Ltac monoid_rwl :=
+    (apply/(compMorphism (frefl _)); do ! rewrite -/(comp _ _)) ||
+    rewrite comp_idl ||
+    rewrite comp_idr ||
+    rewrite comp_assoc ?comp_idl ?comp_idr.
+  Ltac monoid_simpl := repeat monoid_rwl.
 
   Lemma f_hylo_fuse A B C (h1 : A -> IApp A) (H1 : forall x, FinF h1 x)
         (g1 : IApp B -> B) (h2 : B -> IApp B) (H2 : forall x, FinF h2 x)
         (g2 : IApp C -> C) (INV: h2 \o g1 =1 id)
-    : f_hylo g2 h2 H2 \o f_hylo g1 h1 H1 =1 f_hylo g2 h1 H1.
-  Proof.
-    rewrite f_hylo_univ.
-    rewrite -i_fmap_comp.
-    rewrite [in H in _ =1 H]comp_assoc -comp_assoc.
-    rewrite -(comp_idr (_ \o h1)) -INV.
-    rewrite -[in H in _ =1 _ \o H]comp_assoc comp_assoc [in H in _ =1 _ \o H]comp_assoc.
-    rewrite -f_hylo_unr -f_hylo_unr.
+    : f_hylo g2 H2 \o f_hylo g1 H1 =1 f_hylo g2 H1.
+  Proof with monoid_simpl.
+    rewrite f_hylo_univ...
+    rewrite -i_fmap_comp...
+    rewrite -(comp_idr (i_fmap (f_hylo g1 _))) -INV...
+    rewrite -f_hylo_unr...
+    rewrite -f_hylo_unr...
     reflexivity.
   Qed.
 
@@ -945,8 +951,6 @@ Module QSort.
     | h :: t =>
       node h [seq x <- t | x <= h] [seq x <- t | x > h]
     end.
-
-  Print Vector.
 
   Definition p_merge (t : IApp (tree_occ nat) (seq nat)) : seq nat
     := let: existT sh_t c_t := t in
