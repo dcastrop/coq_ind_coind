@@ -768,14 +768,9 @@ Section Definitions.
         as ExtEq.
 
   Add Parametric Morphism A B C : (@comp C B A) with
-        signature (@eqfun C B) ==> eq ==> (@eqfun C A)
-        as compMorphism_l.
-  Proof. by move=> f1 f2 g h x =>/=; rewrite g. Qed.
-
-  Add Parametric Morphism A B C : (@comp C B A) with
-        signature eq ==> (@eqfun B A) ==> (@eqfun C A)
-        as compMorphism_r.
-  Proof. by move=> f g1 g2 h x =>/=; rewrite h. Qed.
+        signature (@eqfun C B) ==> (@eqfun B A) ==> (@eqfun C A)
+        as compMorphism.
+  Proof. by move=> f1 f2 E1 g1 g2 E2 x =>/=; rewrite E1 E2. Qed.
 
   Lemma f_hylo_cata A (g : IApp A -> A)
     : cata g =1 f_hylo g l_out fin_out.
@@ -805,8 +800,7 @@ Section Definitions.
     do 3 (rewrite -comp_assoc); rewrite comp_assoc [in H in _ \o H =1 _]comp_assoc.
     rewrite INV.
     rewrite comp_idr.
-    rewrite comp_assoc.
-    rewrite -[in H in H \o _ =1 _]comp_assoc.
+    rewrite comp_assoc -[in H in H \o _ =1 _]comp_assoc.
     rewrite i_fmap_comp.
     reflexivity.
   Qed.
