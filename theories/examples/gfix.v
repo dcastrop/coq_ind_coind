@@ -797,10 +797,9 @@ Section Definitions.
   Proof.
     rewrite f_hylo_univ.
     rewrite [in H in _ \o H =1 _]f_hylo_unr [in H in H \o _ =1 _]f_hylo_unr.
-    do 3 (rewrite -comp_assoc); rewrite comp_assoc [in H in _ \o H =1 _]comp_assoc.
+    rewrite comp_assoc comp_assoc -[in H in H \o _ \o _ =1 _]comp_assoc.
     rewrite INV.
-    rewrite comp_idr.
-    rewrite comp_assoc -[in H in H \o _ =1 _]comp_assoc.
+    rewrite comp_idl -[in H in H \o h1 =1 _]comp_assoc.
     rewrite i_fmap_comp.
     reflexivity.
   Qed.
