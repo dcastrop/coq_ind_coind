@@ -688,16 +688,16 @@ Section Definitions.
         : forall f, f =1 f_ana T <-> l_out \o f =1 i_fmap f \o h.
   Proof. by move=>f; split; [apply/f_ana_univ_l|apply/f_ana_univ_r]. Qed.
 
-  Definition f_hylo_ A B (g : IApp B -> B) (h : A -> IApp A)
+  Definition hylo_ A B (g : IApp B -> B) (h : A -> IApp A)
     : forall x, FinF h x -> B
     := fix f x H :=
          match h x as h0 return IAll (FinF h) (i_cont h0) -> B with
          | existT s_x c_x => fun H => (g (existT _ s_x (i_fmap_ f H)))
          end (FinF_inv H).
-  Arguments f_hylo_ [A B] g h [x] F.
+  Arguments hylo_ [A B] g h [x] F.
 
-  Lemma f_hylo_irr A B (g : IApp B -> B) (h : A -> IApp A)
-    : forall x (F1 F2 : FinF h x), f_hylo_ g h F1 = f_hylo_ g h F2.
+  Lemma hylo_irr A B (g : IApp B -> B) (h : A -> IApp A)
+    : forall x (F1 F2 : FinF h x), hylo_ g h F1 = hylo_ g h F2.
   Proof.
     fix Ih 2; move=> x.
     case=>[{}x H1] F2; case: F2 H1=>[{}x H2] H1/=.
@@ -710,10 +710,10 @@ Section Definitions.
 
   Definition hylo A B (g : IApp B -> B) (h : A -> IApp A)
              (T : forall x, FinF h x)
-    : A -> B := fun x => f_hylo_ g h (T x).
+    : A -> B := fun x => hylo_ g h (T x).
   Arguments hylo [A B] g [h] T.
 
-  Lemma f_hylo_unr A B (g : IApp B -> B) (h : A -> IApp A)
+  Lemma hylo_unr A B (g : IApp B -> B) (h : A -> IApp A)
         (H : forall x, FinF h x)
     : hylo g H =1 g \o i_fmap (hylo g H) \o h.
   Proof.
@@ -723,14 +723,14 @@ Section Definitions.
     rewrite /fmap_I/i_fmap/i_fmap_/=; congr existT.
     move: {-2 3}c_x (in_refl _).
     rewrite /OCC/=; move: {-3 5}(occ s_x)=>n.
-    by elim=>[|hv mv tv Ih]//= R; rewrite Ih f_hylo_irr.
+    by elim=>[|hv mv tv Ih]//= R; rewrite Ih hylo_irr.
   Qed.
 
   Lemma hylo_univ_l A B (g : IApp B -> B) (h : A -> IApp A)
         (T : forall x, FinF h x)
     : forall f, f =1 hylo g T -> f =1 g \o i_fmap f \o h.
   Proof.
-    move=>f H x; rewrite (H x) f_hylo_unr/=.
+    move=>f H x; rewrite (H x) hylo_unr/=.
     suff: forall v, i_fmap (hylo g T) v = i_fmap f v by move=>->.
     move=>[sh_x c_x]; rewrite /i_fmap/=.
     suff: forall v, Vector.map (hylo g T) v = Vector.map f v by move=>->.
@@ -743,7 +743,7 @@ Section Definitions.
     : forall f, f =1 g \o i_fmap f \o h -> f =1 hylo g T.
   Proof.
     move=> f H x; move: (T x); elim=>{}x.
-    rewrite H f_hylo_unr/=; move: (h x)=>[sh_x c_x]//= {x} T_x Ih.
+    rewrite H hylo_unr/=; move: (h x)=>[sh_x c_x]//= {x} T_x Ih.
     rewrite /i_fmap/=.
     suff: Vector.map f c_x = Vector.map (hylo g T) c_x by move=>->.
     elim: c_x =>[|h_x n_x t_x IhV]//= in T_x Ih *.
@@ -782,11 +782,11 @@ Section Definitions.
         as fmapMorphism.
   Proof. by move=> f g E; rewrite /i_fmap/==>x; rewrite (map_ext_eq E). Qed.
 
-  Lemma f_hylo_cata A (g : IApp A -> A)
+  Lemma hylo_cata A (g : IApp A -> A)
     : cata g =1 hylo g fin_out.
   Proof. by rewrite hylo_univ -cata_unroll. Qed.
 
-  Lemma f_hylo_ana A (h : A -> IApp A) (H : forall x, FinF h x)
+  Lemma hylo_ana A (h : A -> IApp A) (H : forall x, FinF h x)
     : f_ana H =1 hylo l_in H.
   Proof. by rewrite hylo_univ -f_ana_unr. Qed.
 
@@ -809,7 +809,7 @@ Section Definitions.
     rewrite -[_ \o h1]/((g2 \o i_fmap f2) \o (_ \o h1)).
     rewrite -E2.
     rewrite -[(f2 \o _) \o (_ \o h1)]/(f2 \o (_ \o _ \o h1)).
-    rewrite -f_hylo_unr.
+    rewrite -hylo_unr.
     reflexivity.
   Qed.
 
@@ -823,7 +823,7 @@ Section Definitions.
     rewrite -[(g1 \o (_ \o i_fmap f1)) \o h2]/(g1 \o _ \o (i_fmap f1 \o h2)).
     rewrite -E1.
     rewrite -[(g1 \o _) \o (h1 \o f1)]/((g1 \o _ \o h1) \o f1).
-    rewrite -f_hylo_unr.
+    rewrite -hylo_unr.
     reflexivity.
   Qed.
 
@@ -833,17 +833,22 @@ Section Definitions.
     : hylo g2 H2 \o hylo g1 H1 =1 hylo g2 H1.
   Proof.
     apply/hylo_fusion_l.
-    rewrite [in H in H =1 _]f_hylo_unr.
+    rewrite [in H in H =1 _]hylo_unr.
     rewrite -[((g2 \o _) \o h2) \o g1]/((g2 \o _) \o (h2 \o g1)).
     rewrite INV comp_idl.
     reflexivity.
     Restart.
     apply/hylo_fusion_r.
-    rewrite [in H in H =1 _]f_hylo_unr.
+    rewrite [in H in H =1 _]hylo_unr.
     rewrite -[h2 \o ((g1 \o _) \o h1)]/((h2 \o g1) \o (_ \o h1)).
     rewrite INV comp_idr.
     reflexivity.
   Qed.
+
+  Corollary cata_ana_hylo A B
+        (g : IApp B -> B) (h : A -> IApp A) (H : forall x, FinF h x)
+    : cata g \o f_ana H =1 hylo g H.
+  Proof. by rewrite hylo_cata hylo_ana; apply/deforest/l_out_in. Qed.
 
   (****************************************************************************)
   (** "Finite Greatest Fixpoints"                                            **)
@@ -1000,7 +1005,7 @@ Module QSort.
   Definition spl1 := f_ana p_split_terminates.
   Definition app : LFix (tree_occ nat) -> seq nat := cata p_merge.
 
-  Definition qsort : list nat -> list nat := f_hylo p_merge p_split_terminates.
+  Definition qsort : list nat -> list nat := hylo p_merge p_split_terminates.
 End QSort.
 
 (* From Coq Require Extraction ExtrHaskellBasic ExtrHaskellNatInteger. *)
@@ -1022,8 +1027,8 @@ Extraction Inline ana.
 Extraction Inline f_ana.
 Extraction Inline cata.
 Extraction Inline f_cata.
-Extraction Inline f_hylo.
-Extraction Inline f_hylo_.
+Extraction Inline hylo.
+Extraction Inline hylo_.
 Extraction Inline fmap_I.
 Extraction Inline wrap.
 Extraction Inline i_cont.
