@@ -820,7 +820,7 @@ Section Definitions.
     : hylo g1 H1 \o f1 =1 hylo g1 H2.
   Proof.
     rewrite hylo_univ -i_fmap_comp.
-    rewrite -[(g1 \o (_ \o i_fmap f1)) \o h2]/(g1 \o _ \o (i_fmap f1 \o h2)).
+    rewrite -[(g1 \o (_ \o i_fmap _)) \o h2]/(g1 \o _ \o (i_fmap _ \o h2)).
     rewrite -E1.
     rewrite -[(g1 \o _) \o (h1 \o f1)]/((g1 \o _ \o h1) \o f1).
     rewrite -hylo_unr.
@@ -834,14 +834,12 @@ Section Definitions.
   Proof.
     apply/hylo_fusion_l.
     rewrite [in H in H =1 _]hylo_unr.
-    rewrite -[((g2 \o _) \o h2) \o g1]/((g2 \o _) \o (h2 \o g1)).
-    rewrite INV comp_idl.
+    rewrite -comp_assoc INV comp_idl.
     reflexivity.
     Restart.
     apply/hylo_fusion_r.
     rewrite [in H in H =1 _]hylo_unr.
-    rewrite -[h2 \o ((g1 \o _) \o h1)]/((h2 \o g1) \o (_ \o h1)).
-    rewrite INV comp_idr.
+    rewrite comp_assoc comp_assoc INV comp_idr.
     reflexivity.
   Qed.
 
