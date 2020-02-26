@@ -203,18 +203,6 @@ Section Definitions.
   Definition l_out F : CoAlg F (LFix F) :=
     {| func := _; f_eq := @l_out_eq F |}.
 
-  Lemma comp_eq A B C (f : arrow B C) (g : arrow A B) :
-    forall x y, x =e y -> ((f \o g) x) =e ((f \o g) y).
-  Proof. move=> x y E /=; by apply/f_eq/f_eq. Qed.
-
-  Definition comp A B C (f : arrow B C) (g : arrow A B) : arrow A C
-    := {| func := _; f_eq := comp_eq f g |}.
-
-  Lemma id_eq A : forall (x y : Ty A), x =e y -> id x =e id y.
-  Proof. by []. Qed.
-
-  Definition id A : arr A A := {| func := _; f_eq := @id_eq A |}.
-
   Definition cata_f F A (g : Alg F A) : Ty (LFix F) -> Ty A
     := fix f x :=
          match x with
@@ -232,7 +220,7 @@ Section Definitions.
     := {| func := _; f_eq := cata_arr g |}.
 
   Lemma cata_univ_r F A (g : Alg F A) (f : arrow (LFix F) A)
-    : f =1e comp g (comp (fmapA F f) (@l_out F)) -> f =1e cata g.
+    : f =1e g \o fmapA F f \o @l_out F -> f =1e cata g.
   Proof.
     move=> H; elim=> sx kx /= Ih.
     rewrite H/=; apply/f_eq; rewrite /fmapA_f/=.
@@ -241,7 +229,7 @@ Section Definitions.
   Qed.
 
   Lemma cata_univ_l F A (g : Alg F A) (f : arrow (LFix F) A)
-    : f =1e cata g -> f =1e comp g (comp (fmapA F f) (@l_out F)).
+    : f =1e cata g -> f =1e g \o fmapA F f \o @l_out F.
   Proof.
     move=> H; elim=> sx kx /= Ih.
     rewrite H/=; apply/(f_eq g); rewrite /fmapA_f/=.
@@ -251,6 +239,45 @@ Section Definitions.
   Qed.
 
   Lemma cata_univ F A (g : Alg F A) (f : arr (LFix F) A)
-    : f =1e cata g <-> f =1e comp g (comp (fmapA F f) (@l_out F)).
+    : f =1e cata g <-> f =1e g \o fmapA F f \o @l_out F.
   Proof. by split;[apply/cata_univ_l|apply/cata_univ_r]. Qed.
+
+  Inductive FinF F A (h : CoAlg F A) : A -> Prop :=
+  | FinF_fold x : (forall e, FinF h (projT2 (h x) e)) -> FinF h x.
+
+  Lemma FinF_inv F A (h : CoAlg F A) x
+    : FinF h x -> forall e, FinF h (projT2 (h x) e).
+  Proof. by case. Defined.
+
+  Definition ana_f_ F A (h : CoAlg F A) : forall (x : A), FinF h x -> LFix F
+    := fix f x H :=
+         let hx := h x in
+         LFix_in (fun e => f (projT2 hx e) (FinF_inv H e)).
+
+         (* match h x return FinF h x-> LFix F with *)
+         (* | existT s k => fun H' => LFix_in (fun e => f (k e) (FinF_inv1 H p e)) *)
+         (* end H. *)
+
+  (* Finite coalgebras *)
+  Structure FCoAlg F A :=
+    { coalg :> CoAlg F A;
+      finite : forall x, FinF coalg x
+    }.
+
+  Definition ana_f F A (h : FCoAlg F A) : A -> LFix F
+    := fun x => ana_f_ (finite h x).
+
+  Lemma ana_arr F A (h : FCoAlg F A) :
+    forall x y, x =e y -> ana_f h x =e ana_f h y.
+  Proof.
+    rewrite /ana_f; move=> x y; move: x y (finite h x) (finite h y).
+    fix Ih 3; move=> x y [x' Fx] [y' Fy]/=; split.
+    - by case: (f_eq (coalg h) H).
+    - move=> e d1 d2 /=; apply: Ih.
+      by move: (f_eq (coalg h) H)=> [E1 /(_ e d1 d2)].
+  Qed.
+
+  Definition ana F A (h : FCoAlg F A) : arrow A (LFix F)
+    := {| func := ana_f h; f_eq := ana_arr h |}.
+
 End Definitions.
