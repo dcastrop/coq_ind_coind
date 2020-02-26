@@ -238,10 +238,11 @@ Section Definitions.
     by reflexivity.
   Qed.
 
-  Lemma cata_univ F A (g : Alg F A) (f : arr (LFix F) A)
+  Lemma cata_univ F A (g : Alg F A) (f : arrow (LFix F) A)
     : f =1e cata g <-> f =1e g \o fmapA F f \o @l_out F.
   Proof. by split;[apply/cata_univ_l|apply/cata_univ_r]. Qed.
 
+  (* Finite anamorphisms *)
   Inductive FinF F A (h : CoAlg F A) : A -> Prop :=
   | FinF_fold x : (forall e, FinF h (projT2 (h x) e)) -> FinF h x.
 
@@ -249,20 +250,24 @@ Section Definitions.
     : FinF h x -> forall e, FinF h (projT2 (h x) e).
   Proof. by case. Defined.
 
-  Definition ana_f_ F A (h : CoAlg F A) : forall (x : A), FinF h x -> LFix F
-    := fix f x H :=
-         let hx := h x in
-         LFix_in (fun e => f (projT2 hx e) (FinF_inv H e)).
-
-         (* match h x return FinF h x-> LFix F with *)
-         (* | existT s k => fun H' => LFix_in (fun e => f (k e) (FinF_inv1 H p e)) *)
-         (* end H. *)
-
   (* Finite coalgebras *)
   Structure FCoAlg F A :=
     { coalg :> CoAlg F A;
       finite : forall x, FinF coalg x
     }.
+
+  Definition ana_f_ F A (h : CoAlg F A) : forall (x : A), FinF h x -> LFix F
+    := fix f x H :=
+         let hx := h x in
+         LFix_in (fun e => f (projT2 hx e) (FinF_inv H e)).
+
+  Lemma ana_f_irr F A (h : CoAlg F A)
+    : forall (x : A) (F1 F2 : FinF h x), ana_f_ F1 =e ana_f_ F2.
+  Proof.
+    move=>/=; fix Ih 2; move=> x [{}x Fx] F2; move: F2 Fx=> [{}x Fy] Fx/=.
+    split=>// e d1 d2; rewrite (bool_irrelevance d2 d1) => {d2}.
+    by apply: Ih.
+  Qed.
 
   Definition ana_f F A (h : FCoAlg F A) : A -> LFix F
     := fun x => ana_f_ (finite h x).
@@ -280,4 +285,88 @@ Section Definitions.
   Definition ana F A (h : FCoAlg F A) : arrow A (LFix F)
     := {| func := ana_f h; f_eq := ana_arr h |}.
 
+  Lemma ana_univ_r F A (h : FCoAlg F A) (f : arrow A (LFix F))
+    : f =1e @l_in F \o fmapA F f \o coalg h -> f =1e ana h.
+  Proof.
+    move=> H; rewrite /ana/ana_f/==>x; move: x (finite h x).
+    fix Ih 2; move=> x [{}x Fx].
+    rewrite -[LFixR (f x) _]/(eqRel (Eq _) (f x) _) H/=; split=>// e d1 d2.
+    rewrite (bool_irrelevance d2 d1); by apply: Ih.
+  Qed.
+
+  Lemma ana_univ_l F A (h : FCoAlg F A) (f : arrow A (LFix F))
+    : f =1e ana h -> f =1e @l_in F \o fmapA F f \o coalg h.
+  Proof.
+    move=> H x; move: x (finite h x).
+    fix Ih 2; move=> x [{}x Fx].
+    rewrite H /=/ana_f; move: (finite h x)=>Fx'; move: Fx' Fx.
+    move=>[{}x Fx'] Fx/=; split=>// e d1 d2.
+    rewrite (bool_irrelevance d2 d1).
+    rewrite -[LFixR _ _]/(eqRel (Eq _) _ _).
+    move: (H (projT2 (coalg h x) (exist _ e d1))); rewrite /ana/ana_f/=.
+    rewrite -![LFixR _ _]/(eqRel (Eq _) _ _).
+    rewrite ana_f_irr =><-/=; by apply: LFixR_refl.
+  Qed.
+
+  Lemma ana_univ F A (h : FCoAlg F A) (f : arrow A (LFix F))
+    : f =1e ana h <-> f =1e @l_in F \o fmapA F f \o coalg h.
+  Proof. by split;[apply/ana_univ_l|apply/ana_univ_r]. Qed.
+
+  (** Hylomorphisms **)
+
+  Print AppT.
+
+  Definition hylo_f_ F A B (g : Alg F B) (h : CoAlg F A)
+    : forall (x : A), FinF h x -> B
+    := fix f x H :=
+         let hx := h x in
+         g (existT (fun sh=> sig (dom sh) -> B)
+                   (projT1 hx)
+                   (fun e => f (projT2 hx e) (FinF_inv H e))).
+
+  Lemma hylo_f_irr F A B (g : Alg F B) (h : CoAlg F A)
+    : forall (x : A) (F1 F2 : FinF h x), hylo_f_ g F1 =e hylo_f_ g F2.
+  Proof.
+    move=>/=; fix Ih 2; move=> x [{}x Fx] F2; move: F2 Fx=> [{}x Fy] Fx/=.
+    apply/f_eq=>/=; split=>//= e d1 d2; rewrite (bool_irrelevance d2 d1)=>{d2}.
+    by apply: Ih.
+  Qed.
+
+  Definition hylo_f F A B (g : Alg F B) (h : FCoAlg F A)
+    := fun x => hylo_f_ g (finite h x).
+
+  Lemma hylo_arr F A B (g : Alg F B) (h : FCoAlg F A)
+    : forall x y, x =e y -> hylo_f g h x =e hylo_f g h y.
+  Proof.
+    rewrite /hylo_f; move=> x y; move: x y (finite h x) (finite h y).
+    fix Ih 3; move=> x y [x' Fx] [y' Fy]/= H; apply/f_eq=>/=.
+    case: (f_eq (coalg h) H)=>/= Es Ek; split=>//= e d1 d2.
+    by apply/Ih/Ek.
+  Qed.
+
+  Definition hylo F A B (g : Alg F B) (h : FCoAlg F A) : arrow A B
+    := {| func := _ ; f_eq := hylo_arr g h |}.
+
+  Lemma hylo_univ_r F A B (g : Alg F B) (h : FCoAlg F A) (f : arrow A B)
+    : f =1e g \o fmapA F f \o coalg h -> f =1e hylo g h.
+  Proof.
+    move=> H; rewrite /hylo/hylo_f/==>x; move: x (finite h x).
+    fix Ih 2; move=> x Fx; rewrite H/=/fmapA_f/=; case: Fx=> {}x Fx/=.
+    apply/f_eq => /=; split=>//= e d1 d2.
+    by rewrite (bool_irrelevance d2 d1); apply/Ih.
+  Qed.
+
+  Lemma hylo_univ_l F A B (g : Alg F B) (h : FCoAlg F A) (f : arrow A B)
+    : f =1e hylo g h -> f =1e g \o fmapA F f \o coalg h.
+  Proof.
+    move=> H x; move: x (finite h x).
+    fix Ih 2; move=> x [{}x Fx].
+    rewrite H /=/hylo_f; move: (finite h x)=>Fx'; move: Fx' Fx.
+    move=>[{}x Fx'] Fx/=; apply/f_eq; split=>//= e d1 d2.
+    by rewrite (bool_irrelevance d2 d1) H /=/hylo_f/= hylo_f_irr; reflexivity.
+  Qed.
+
+  Lemma hylo_univ F A B (g : Alg F B) (h : FCoAlg F A) (f : arrow A B)
+    : f =1e hylo g h <-> f =1e g \o fmapA F f \o coalg h.
+  Proof. by split;[apply/hylo_univ_l|apply/hylo_univ_r]. Qed.
 End Definitions.
