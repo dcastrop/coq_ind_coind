@@ -600,10 +600,17 @@ Section ExQsort.
 
   Lemma split_fin : forall x, FinF c_split x.
   Proof.
-  Admitted.
-  Definition tsplit := {| coalg := c_split; finite := split_fin |}.
+    move=>x; move: {-1}(size x) (leqnn (size x))=> n.
+    elim: n => [|n Ih] in x *; case: x=> [|h t]/=; eauto=>E; constructor=>/=.
+    - by case.
+    - by [].
+    - move=> [e /=_]; apply/Ih.
+      by case: e; rewrite size_filter (leq_trans (count_size _ _)).
+  Qed.
 
+  Definition tsplit := {| coalg := c_split; finite := split_fin |}.
   Definition msort : seq nat -> seq nat := func (hylo merge tsplit).
+  Eval compute in msort [:: 2;3;4; 1].
 End ExQsort.
 
 From Coq Require Extraction ExtrOcamlBasic ExtrOcamlNatInt.
