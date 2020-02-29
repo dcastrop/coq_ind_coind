@@ -17,157 +17,118 @@ Reserved Notation "x '=1/sval' y" (at level 70, no associativity).
 (****************************************************************************)
 (** Assumptions and Strict positivisation of functors                      **)
 (****************************************************************************)
+Class equivalence A : Type :=
+  MkEquiv
+    { eqRel : A -> A -> Prop;
+      e_refl : forall x, eqRel x x;
+      e_sym : forall x y, eqRel x y -> eqRel y x;
+      e_trans : forall x y z, eqRel x y -> eqRel y z -> eqRel x z;
+    }.
 
-Module Type AType.
-  Axiom t : Type.
-End AType.
+Hint Resolve e_refl : ffix.
+Hint Resolve e_sym : ffix.
+Hint Resolve e_trans : ffix.
+
+(* Instance def_eq A : equivalence A := *)
+(*   {| eqRel := @eq A; *)
+(*      e_refl := @erefl A; *)
+(*      e_sym := @esym A; *)
+(*      e_trans := @etrans A; *)
+(*   |}. *)
+
+Add Parametric Relation (A: Type) (eq : equivalence A) : A (@eqRel A eq)
+    reflexivity proved by (@e_refl A eq)
+    symmetry proved by (@e_sym A eq)
+    transitivity proved by (@e_trans A eq)
+      as ExtEq.
 
 Reserved Notation "f =e g" (at level 70, no associativity).
+(* Reserved Notation "f =1e g" (at level 70, no associativity). *)
+Notation "f =e g" := (eqRel f g).
+(* Notation "f =1e g" := (forall x, eqRel (Eq _) (f x) (g x)). *)
 
-Module Type EType.
-  Parameter t : Type.
-  Parameter eq_r : t -> t -> Prop.
-  Axiom e_refl : forall x, eq_r x x.
-  Axiom e_sym : forall x y, eq_r x y -> eq_r y x.
-  Axiom e_trans : forall x y z, eq_r x y -> eq_r y z -> eq_r x z.
-End EType.
+Instance ext_eq (A B : Type) (eq_B : equivalence B) : equivalence (A -> B).
+Proof.
+  apply: (@MkEquiv _ (fun f g =>forall x, eqRel (f x) (g x))).
+  - by move=>f x; apply: e_refl.
+  - by move=>f g H x; apply: e_sym.
+  - by move=>f g h Hf Hg x; apply: e_trans.
+Defined.
 
-Module MkEType (A : AType) <: EType.
-  Definition t := A.t.
+(** Is position valid in shape? *)
+Class functor (S P : Type) :=
+  { dom : S -> P -> bool
+  }.
 
-  Definition eq_r := @eq t.
-  Definition e_refl := @erefl t.
-  Definition e_sym := @esym t.
-  Definition e_trans := @etrans t.
-End MkEType.
+Definition App S P (F : functor S P) (X : Type) := {sh : S & sig (dom sh) -> X}.
 
-Module Theory (T : EType).
-  Notation "f =e g" := (T.eq_r f g).
+Lemma cont_irr S P (F : functor S P) X (sh : S) (f : sig (dom sh) -> X)
+  : forall x p1 p2, f (exist _ x p1) = f (exist _ x p2).
+Proof. move=> x/= p1 p2; by rewrite (bool_irrelevance p1 p2). Qed.
 
-  Add Parametric Relation : T.t T.eq_r
-      reflexivity proved by T.e_refl
-      symmetry proved by T.e_sym
-      transitivity proved by T.e_trans
-        as ExtEq.
-End Theory.
+Definition AppR S P (F : functor S P) (X : Type) (e : equivalence X)
+           (x y : App F X) : Prop
+  := projT1 x = projT1 y /\
+     (forall e d1 d2, projT2 x (exist _ e d1) =e projT2 y (exist _ e d2)).
 
-Module Type Functor.
-  Axiom shape : Type.
-  Axiom position : Type.
-  Axiom dom : shape -> position -> bool.
-End Functor.
+Lemma AppR_inv_sh S P (F : functor S P) X (e : equivalence X) x y :
+  @AppR S P F X e x y -> projT1 x = projT1 y.
+Proof. by case. Qed.
 
-Module App (F : Functor) (X : EType).
-  Module XT := Theory(X).
-  Import XT.
-  Definition t := {sh : F.shape & sig (F.dom sh) -> X.t}.
+Lemma AppR_inv_k S P (F : functor S P) X (e : equivalence X) x y :
+  @AppR S P F X e x y ->
+  forall e d1 d2, projT2 x (exist _ e d1) =e projT2 y (exist _ e d2).
+Proof. by case. Qed.
 
-  Lemma cont_irr (sh : F.shape) (f : sig (F.dom sh) -> X.t)
-    : forall x p1 p2, f (exist _ x p1) = f (exist _ x p2).
-  Proof. move=> x/= p1 p2; by rewrite (bool_irrelevance p1 p2). Qed.
+Instance App_equiv S P (F : functor S P) (X : Type) (e : equivalence X)
+  : equivalence (App F X).
+Proof.
+  apply: (@MkEquiv _ (@AppR S P F X e)).
+  - move=> [shx kx]; constructor=>//=x d1 d2.
+    rewrite (bool_irrelevance d1 d2); by apply: e_refl.
+  - move=> x y [Sxy Exy]; split; first by apply/esym.
+    by move=> z d1 d2; symmetry.
+  - move=> x y z [Sxy Exy] [Syz Eyz]; split; first by rewrite Sxy.
+    move=>t d1 d2; have d3: dom (projT1 y) t by move: d1; rewrite Sxy.
+    by rewrite (Exy t d1 d3).
+Defined.
 
-  Definition appR (x y : t) : Prop
-    := projT1 x = projT1 y /\
-       (forall e d1 d2, projT2 x (exist _ e d1) =e projT2 y (exist _ e d2)).
+Class morph (A B : Type) {eq_A : equivalence A} {eq_B : equivalence B}
+           (f : A -> B) : Prop
+  := { f_eq : forall x y, x =e y -> f x =e f y }.
 
-  Lemma AppR_inv_sh x y : @appR x y -> projT1 x = projT1 y.
-  Proof. by case. Qed.
+(* Definition arr (A B : Type) (eq_A : equivalence A) (eq_B : equivalence B) *)
+(*   := sig (@morph A B eq_A eq_B). *)
 
-  Lemma AppR_inv_k x y :
-    @appR x y ->
-    forall e d1 d2, projT2 x (exist _ e d1) =e projT2 y (exist _ e d2).
-  Proof. by case. Qed.
-End App.
+Definition fmap S P {F : functor S P} A B (f : A -> B) (x : App F A)
+  : App F B := existT _ (projT1 x) (f \o projT2 x).
 
-Module AppTy (F : Functor) (X : EType) <: EType.
-  Module FX := App(F)(X).
-  Definition t := FX.t.
+Lemma fmapA_eqF S P {F : functor S P} A B
+      {eq_A : equivalence A} {eq_B : equivalence B}
+      (f : A -> B) {M : morph f}
+  : forall x y, x =e y -> fmap f x =e fmap f y.
+Proof.
+  move=> [sx kx] [sy ky] [/=Es Ek]; split=>//= e d1 d2.
+  by apply/f_eq/Ek.
+Qed.
 
-  Definition eq_r (f g : t) := FX.appR f g.
-  Lemma e_refl : forall f, eq_r f f.
-  Proof.
-    move=> [s k]; split=>//= e d1 d2.
-    by rewrite (bool_irrelevance d2 d1); reflexivity.
-  Qed.
+Definition fmapA F A B (f : arrow A B) : arrow (App F A) (App F B)
+  := {| func := _ ; f_eq := fmapA_eqF f |}.
 
-  Lemma e_sym : forall f g, eq_r f g -> eq_r g f.
-  Proof.
-    move=> x y [Sxy Exy]; split; first by apply/esym.
-    by move=> e d1 d2; symmetry.
-  Qed.
+Lemma comp_eq A B C (f : arrow B C) (g : arrow A B) :
+  forall x y, x =e y -> (f \o g) x =e (f \o g) y.
+Proof. by move=> x y H; apply/f_eq/f_eq. Qed.
 
-  Lemma e_trans : forall x y z, eq_r x y -> eq_r y z -> eq_r x z.
-  Proof.
-    move=> x y z [Sxy Exy] [Syz Eyz]; split; first by rewrite Sxy.
-    move=>e d1 d2; have d3: F.dom (projT1 y) e by move: d1; rewrite Sxy.
-    by rewrite (Exy e d1 d3).
-  Qed.
-End AppTy.
+Definition acomp A B C (f : arrow B C) (g : arrow A B) : arrow A C :=
+  {| func := _; f_eq := comp_eq f g |}.
 
-Module Type Func(A B : EType).
-  Axiom f : A.t -> B.t.
-  Axiom f_eq : forall x y, A.eq_r x y -> B.eq_r (f x) (f y).
-End Func.
+Notation "f \o g" := (acomp f g).
 
-Module FuncTy (DOM COD : EType) <: EType.
-  Module BTheory := Theory(COD).
-  Import BTheory.
+Lemma id_eq (A : TyEq) : forall (x y : A), x =e y -> id x =e id y.
+Proof. by []. Qed.
 
-  Definition t := DOM.t -> COD.t.
-  Definition eq_r (f g : t) := forall x, f x =e g x.
-  Lemma e_refl : forall f, eq_r f f.
-  Proof. move=> f x; by reflexivity. Qed.
-
-  Lemma e_sym : forall f g, eq_r f g -> eq_r g f.
-  Proof. move=> f g H x. by symmetry. Qed.
-
-  Lemma e_trans : forall x y z, eq_r x y -> eq_r y z -> eq_r x z.
-  Proof. move=> f g h H1 H2 x; by rewrite H1. Qed.
-End FuncTy.
-
-Module FMap (A B : EType) (F : Functor) (f : Func(A)(B)).
-  Module DOM := AppTy(F)(A).
-  Module COD := AppTy(F)(B).
-  Module Def <: Func(DOM)(COD).
-    Definition f (x : DOM.t) : COD.t
-      := existT _ (projT1 x) (f.f \o projT2 x).
-
-    Lemma f_eq : forall x y, DOM.eq_r x y -> COD.eq_r (f x) (f y).
-    Proof.
-      move=> [sx kx] [sy ky] [/=Es Ek]; split=>//= e d1 d2.
-        by apply/f.f_eq/Ek.
-    Qed.
-  End Def.
-End FMap.
-
-Module Comp (A B C : EType) (f : Func(B)(C)) (g : Func(A)(B)) <: Func(A)(C).
-  Definition f : A.t -> C.t := f.f \o g.f.
-
-  Lemma f_eq : forall x y, A.eq_r x y -> C.eq_r (f x) (f y).
-  Proof. by move=> x y H; apply/f.f_eq/g.f_eq. Qed.
-End Comp.
-
-Module Id (A : EType) <: Func(A)(A).
-  Definition f := fun x : A.t => x.
-
-  Lemma f_eq : forall x y, A.eq_r x y -> A.eq_r (f x) (f y).
-  Proof. by []. Qed.
-End Id.
-
-Module Type Alg (F : Functor) (A : EType).
-  Module FA := AppTy(F)(A).
-  Declare Module Def : Func(FA)(A).
-End Alg.
-
-Module Type CoAlg (F : Functor) (A : EType).
-  Module FA := AppTy(F)(A).
-  Declare Module Def : Func(A)(FA).
-End CoAlg.
-
-Module LFix(A : Alg).
-  M
-  Inductive LFixT F : Type :=
-  | LFix_in (sh : Shape F): (sig (dom sh) -> LFixT F) -> LFixT F.
+Definition id A : arrow A A :=
+  {| func := _; f_eq := @id_eq A |}.
 
 Lemma fmap_id F A : fmapA F (id A) =e id _.
 Proof.
