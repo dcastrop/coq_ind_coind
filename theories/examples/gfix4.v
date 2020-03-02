@@ -645,10 +645,14 @@ Section ExQsort.
     }.
 
   Definition m_merge (x : App (Ts nat) Tp (seq nat)) : seq nat :=
-    match projT1 x as sh return (sig (dom sh) -> seq nat) -> seq nat with
-    | Leaf => fun=>[::]
-    | Node h => fun k=> k (exist _ Lbranch is_true_true) ++ h :: k (exist _ Rbranch is_true_true)
-    end (projT2 x).
+    match a_out x with
+    | None => [::]
+    | Some (h, l, r) => l ++ h :: r
+    end.
+    (* match projT1 x as sh return (sig (dom sh) -> seq nat) -> seq nat with *)
+    (* | Leaf => fun=>[::] *)
+    (* | Node h => fun k=> k (exist _ Lbranch is_true_true) ++ h :: k (exist _ Rbranch is_true_true) *)
+    (* end (projT2 x). *)
   Lemma m_merge_arr : forall x y, x =e y -> m_merge x =e m_merge y.
   Proof.
     move=>[[|hx]/= kx]/= [[|hy]//= ky] [//= [<-]] H.
@@ -685,7 +689,6 @@ End ExQsort.
 
 From Coq Require Extraction ExtrOcamlBasic ExtrOcamlNatInt.
 (* Set Extraction TypeExpand. *)
-Set Extraction Flag 2047.
 Extraction Inline app.
 Extraction Inline coalg.
 Extraction Inline hylo.
@@ -702,4 +705,5 @@ Extraction Inline m_split.
 Extraction Inline a_out.
 Extraction Inline c_split.
 Extraction Inline tsplit.
+Set Extraction Flag 2047.
 Recursive Extraction msort.
