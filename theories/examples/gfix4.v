@@ -341,25 +341,28 @@ Lemma cata_univ S P {F : functor S P} A {eA : equivalence A} (g : Alg S P A)
 Proof. by split;[apply/cata_univ_l|apply/cata_univ_r]. Qed.
 
 (* Finite anamorphisms *)
-Inductive FinF F A (h : CoAlg F A) : A -> Prop :=
+Inductive FinF S P {F : functor S P} A {eA : equivalence A}
+          (h : CoAlg S P A) : A -> Prop :=
 | FinF_fold x : (forall e, FinF h (projT2 (h x) e)) -> FinF h x.
 
-Lemma FinF_inv F A (h : CoAlg F A) x
+Lemma FinF_inv S P {F : functor S P} A {eA : equivalence A} (h : CoAlg S P A) x
   : FinF h x -> forall e, FinF h (projT2 (h x) e).
 Proof. by case. Defined.
 
 (* Finite coalgebras *)
-Structure FCoAlg F A :=
-  { coalg :> CoAlg F A;
+Structure FCoAlg S P {F : functor S P} A {eA : equivalence A} :=
+  { coalg :> CoAlg S P A;
     finite : forall x, FinF coalg x
   }.
+Arguments FCoAlg S P {F} A {eA}.
 
-Definition ana_f_ F A (h : CoAlg F A) : forall (x : A), FinF h x -> LFix F
+Definition ana_f_ S P {F : functor S P} A {eA : equivalence A} (h : CoAlg S P A)
+  : forall (x : A), FinF h x -> LFix S P
   := fix f x H :=
        let hx := h x in
        LFix_in (fun e => f (projT2 hx e) (FinF_inv H e)).
 
-Lemma ana_f_irr F A (h : CoAlg F A)
+Lemma ana_f_irr S P {F : functor S P} A {eA : equivalence A} (h : CoAlg S P A)
   : forall (x : A) (F1 F2 : FinF h x), ana_f_ F1 =e ana_f_ F2.
 Proof.
   move=>/=; fix Ih 2; move=> x [{}x Fx] F2; move: F2 Fx=> [{}x Fy] Fx/=.
@@ -367,11 +370,12 @@ Proof.
   by apply: Ih.
 Qed.
 
-Definition ana_f F A (h : FCoAlg F A) : A -> LFix F
+Definition ana_f S P {F : functor S P} A {eA : equivalence A} (h : FCoAlg S P A)
+  : A -> LFix S P
   := fun x => ana_f_ (finite h x).
 
-Lemma ana_arr F A (h : FCoAlg F A) :
-  forall x y, x =e y -> ana_f h x =e ana_f h y.
+Lemma ana_arr S P {F : functor S P} A {eA : equivalence A} (h : FCoAlg S P A)
+  : forall x y, x =e y -> ana_f h x =e ana_f h y.
 Proof.
   rewrite /ana_f; move=> x y; move: x y (finite h x) (finite h y).
   fix Ih 3; move=> x y [x' Fx] [y' Fy]/=; split.
@@ -380,8 +384,9 @@ Proof.
     by move: (f_eq (coalg h) H)=> [E1 /(_ e d1 d2)].
 Qed.
 
-Definition ana F A (h : FCoAlg F A) : arrow A (LFix F)
-  := {| func := ana_f h; f_eq := ana_arr h |}.
+Definition ana S P (F : functor S P) A (eA : equivalence A)
+           (h : FCoAlg S P A) : A ~> LFix S P
+  := {| app := ana_f h; f_eq := ana_arr h |}.
 
 Lemma ana_univ_r F A (h : FCoAlg F A) (f : arrow A (LFix F))
   : f =e @l_in F \o fmapA F f \o coalg h -> f =e ana h.
