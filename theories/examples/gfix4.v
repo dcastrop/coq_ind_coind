@@ -36,6 +36,7 @@ Hint Resolve e_trans : ffix.
 (*      e_trans := @etrans A; *)
 (*   |}. *)
 
+
 Add Parametric Relation (A: Type) (eq : equivalence A) : A (@eqRel A eq)
     reflexivity proved by (@e_refl A eq)
     symmetry proved by (@e_sym A eq)
@@ -60,28 +61,29 @@ Class functor (S P : Type) :=
   { dom : S -> P -> bool
   }.
 
-Definition App S P (F : functor S P) (X : Type) := {sh : S & sig (dom sh) -> X}.
+Definition App S P {F : functor S P} (X : Type) := {sh : S & sig (dom sh) -> X}.
+Arguments App S P [F] X.
 
-Lemma cont_irr S P (F : functor S P) X (sh : S) (f : sig (dom sh) -> X)
+Lemma cont_irr S P {F : functor S P} X (sh : S) (f : sig (dom sh) -> X)
   : forall x p1 p2, f (exist _ x p1) = f (exist _ x p2).
 Proof. move=> x/= p1 p2; by rewrite (bool_irrelevance p1 p2). Qed.
 
-Definition AppR S P (F : functor S P) (X : Type) (e : equivalence X)
-           (x y : App F X) : Prop
+Definition AppR S P {F : functor S P} (X : Type) {e : equivalence X}
+           (x y : App S P X) : Prop
   := projT1 x = projT1 y /\
      (forall e d1 d2, projT2 x (exist _ e d1) =e projT2 y (exist _ e d2)).
 
-Lemma AppR_inv_sh S P (F : functor S P) X (e : equivalence X) x y :
-  @AppR S P F X e x y -> projT1 x = projT1 y.
+Lemma AppR_inv_sh S P {F : functor S P} X {e : equivalence X} x y :
+  AppR x y -> projT1 x = projT1 y.
 Proof. by case. Qed.
 
-Lemma AppR_inv_k S P (F : functor S P) X (e : equivalence X) x y :
-  @AppR S P F X e x y ->
+Lemma AppR_inv_k S P {F : functor S P} X {e : equivalence X} x y :
+  AppR x y ->
   forall e d1 d2, projT2 x (exist _ e d1) =e projT2 y (exist _ e d2).
 Proof. by case. Qed.
 
-Instance App_equiv S P (F : functor S P) (X : Type) (e : equivalence X)
-  : equivalence (App F X).
+Instance App_equiv S P {F : functor S P} (X : Type) {e : equivalence X}
+  : equivalence (App S P X).
 Proof.
   apply: (@MkEquiv _ (@AppR S P F X e)).
   - move=> [shx kx]; constructor=>//=x d1 d2.
@@ -93,119 +95,153 @@ Proof.
     by rewrite (Exy t d1 d3).
 Defined.
 
-Class morph (A B : Type) {eq_A : equivalence A} {eq_B : equivalence B}
-           (f : A -> B) : Prop
-  := { f_eq : forall x y, x =e y -> f x =e f y }.
+Structure morph (A B : Type) {eq_A : equivalence A} {eq_B : equivalence B}
+  := { app :> A -> B;
+       f_eq : forall x y, x =e y -> app x =e app y
+     }.
+Arguments morph A B _ _ : clear implicits.
+
+Reserved Notation "x ~> y" (at level 95, right associativity, y at level 200).
+Notation "x ~> y" := (morph x y _ _).
+
+Instance eq_morph (A B : Type) {eq_A : equivalence A} {eq_B : equivalence B}
+  : equivalence (A ~> B).
+Proof.
+  apply: (@MkEquiv _ (fun f g =>forall x, app f x =e app g x)).
+  - by move=>f x; apply: e_refl.
+  - by move=>f g H x; apply: e_sym.
+  - by move=>f g h Hf Hg x; apply: e_trans.
+Defined.
 
 (* Definition arr (A B : Type) (eq_A : equivalence A) (eq_B : equivalence B) *)
 (*   := sig (@morph A B eq_A eq_B). *)
 
-Definition fmap S P {F : functor S P} A B (f : A -> B) (x : App F A)
-  : App F B := existT _ (projT1 x) (f \o projT2 x).
+Definition fmapA S P {F : functor S P} A B (f : A -> B) (x : App S P A)
+  : App S P B := existT _ (projT1 x) (f \o projT2 x).
 
 Lemma fmapA_eqF S P {F : functor S P} A B
       {eq_A : equivalence A} {eq_B : equivalence B}
-      (f : A -> B) {M : morph f}
-  : forall x y, x =e y -> fmap f x =e fmap f y.
+      (f : A ~> B)
+  : forall x y, x =e y -> fmapA f x =e fmapA f y.
 Proof.
   move=> [sx kx] [sy ky] [/=Es Ek]; split=>//= e d1 d2.
   by apply/f_eq/Ek.
 Qed.
 
-Definition fmapA F A B (f : arrow A B) : arrow (App F A) (App F B)
-  := {| func := _ ; f_eq := fmapA_eqF f |}.
+Definition fmap S P {F : functor S P}
+           A B {eq_A : equivalence A} {eq_B : equivalence B}
+           (f : A ~> B) : App S P A ~> App S P B
+  := {| app := _ ; f_eq := fmapA_eqF f |}.
 
-Lemma comp_eq A B C (f : arrow B C) (g : arrow A B) :
+Lemma comp_eq A B C
+      {e1 : equivalence A} {e2 : equivalence B} {e3 : equivalence C}
+      (f : B ~> C) (g : A ~> B) :
   forall x y, x =e y -> (f \o g) x =e (f \o g) y.
 Proof. by move=> x y H; apply/f_eq/f_eq. Qed.
 
-Definition acomp A B C (f : arrow B C) (g : arrow A B) : arrow A C :=
-  {| func := _; f_eq := comp_eq f g |}.
+Definition acomp A B C
+      {e1 : equivalence A} {e2 : equivalence B} {e3 : equivalence C}
+      (f : B ~> C) (g : A ~> B) : A ~> C
+  := {| app := _; f_eq := comp_eq f g |}.
 
 Notation "f \o g" := (acomp f g).
 
-Lemma id_eq (A : TyEq) : forall (x y : A), x =e y -> id x =e id y.
+Lemma id_eq (A : Type) {eq_A : equivalence A}
+  : forall (x y : A), x =e y -> id x =e id y.
 Proof. by []. Qed.
 
-Definition id A : arrow A A :=
-  {| func := _; f_eq := @id_eq A |}.
+Definition id A {eq : equivalence A} : A ~> A :=
+  {| app := _; f_eq := @id_eq A eq |}.
+Arguments id {A eq}.
 
-Lemma fmap_id F A : fmapA F (id A) =e id _.
+Lemma fmap_id S P {F : functor S P} A {eq_A : equivalence A}
+  : fmap (S:=S) (P:=P) (A:=A) id =e id.
 Proof.
-  move=> [s k]/=; rewrite /fmapA_f/=; split=>//= e d1 d2.
+  move=> [s k]/=; rewrite /fmap/=; split=>//= e d1 d2.
   rewrite (bool_irrelevance d2 d1); by reflexivity.
 Qed.
 
-Lemma fmap_comp F A B C (f : arrow B C) (g : arrow A B)
-  : fmapA F (f \o g) =e fmapA F f \o fmapA F g.
+Lemma fmap_comp S P {F : functor S P} (A B C : Type)
+      {eq_A : equivalence A} {eq_B : equivalence B} {eq_C :equivalence C}
+      (f : B ~> C) (g : A ~> B)
+  : fmap (f \o g) =e fmap f \o fmap g.
 Proof.
-  move=> [s k]/=; rewrite /fmapA_f/=; split=>//= e d1 d2.
+  move=> [s k]/=; rewrite /fmap/=; split=>//= e d1 d2.
   rewrite (bool_irrelevance d2 d1); by reflexivity.
 Qed.
 
-Add Parametric Morphism F (A B : TyEq) : (@fmapA F A B)
+Add Parametric Morphism S P (F : functor S P)
+    (A B : Type) (e1 : equivalence A) (e2 : equivalence B)
+  : (@fmap S P F A B e1 e2)
     with signature
-    (eqRel (Eq (arrow A B)))
-      ==> (eqRel (Eq (arrow (App F A) (App F B))))
+    (eqRel (A:=A ~> B))
+      ==> (eqRel (A:=App S P A ~> App S P B))
       as fmapMorphism.
 Proof.
   move=> f1 f2 Ef [s k]; split=>//= e d1 d2.
   by rewrite (bool_irrelevance d1 d2).
 Qed.
 
-Add Parametric Morphism (A B C : TyEq) : (@acomp A B C)
+Add Parametric Morphism (A B C : Type)
+    (eA : equivalence A) (eB : equivalence B) (eC : equivalence C)
+  : (@acomp A B C eA eB eC)
     with signature
-    (eqRel (Eq (arrow B C)))
-      ==> (eqRel (Eq (arrow A B)))
-      ==> (eqRel (Eq (arrow A C)))
+    (eqRel (A:=B ~> C))
+      ==> (eqRel (A:=A ~> B))
+      ==> (eqRel (A:=A ~> C))
       as compMorphism.
 Proof.
   move=> f1 f2 Ef g1 g2 Eg x=>//=.
   by apply/(e_trans (Ef (g1 x)))/f_eq/Eg.
 Qed.
 
-Definition Alg F A := arrow (App F A) A.
-Definition CoAlg F A := arrow A (App F A).
+Definition Alg S P {F : functor S P} A {eA : equivalence A} := App S P A ~> A.
+Arguments Alg S P {F} A {eA}.
+Definition CoAlg S P {F : functor S P} A {eA : equivalence A} := A ~> App S P A.
+Arguments CoAlg S P {F} A {eA}.
 
-Inductive LFixT F : Type :=
-| LFix_in (sh : Shape F): (sig (dom sh) -> LFixT F) -> LFixT F.
+Inductive LFix S P {F : functor S P} : Type :=
+| LFix_in sh : (sig (dom sh) -> @LFix S P F) -> @LFix S P F.
+Arguments LFix S P {F}.
 
-Definition l_shape F (x : LFixT F) :=
+Definition l_shape S P {F : functor S P} (x : LFix S P) :=
   match x with
   | LFix_in sh _ => sh
   end.
-Definition l_cont F (x : LFixT F) :=
-  match x return sig (dom (l_shape x)) -> LFixT F with
+Definition l_cont S P {F : functor S P} (x : LFix S P) :=
+  match x return sig (dom (l_shape x)) -> LFix S P with
   | LFix_in _ k => k
   end.
 
-Fixpoint LFixR F (x y : LFixT F) : Prop :=
+Fixpoint LFixR S P {F : functor S P} (x y : LFix S P) : Prop :=
   l_shape x = l_shape y /\
   forall e d1 d2,
-      LFixR (@l_cont F x (exist _ e d1)) (@l_cont F y (exist _ e d2)).
+      LFixR (l_cont (x:=x) (exist _ e d1)) (l_cont (x:=y) (exist _ e d2)).
 
-Lemma LFixR_inv_sh F (x y : LFixT F) : LFixR x y -> l_shape x = l_shape y.
+Lemma LFixR_inv_sh S P {F : functor S P} (x y : LFix S P)
+  : LFixR x y -> l_shape x = l_shape y.
 Proof. by case: x=>[sx kx]; case: y=>[sy ky] []. Qed.
 
-Lemma LFixR_inv_k F (x y : LFixT F)
+Lemma LFixR_inv_k S P {F : functor S P} (x y : LFix S P)
   : LFixR x y ->
     forall e d1 d2,
-      LFixR (@l_cont F x (exist _ e d1)) (@l_cont F y (exist _ e d2)).
+      LFixR (l_cont (x:=x) (exist _ e d1)) (l_cont (x:=y) (exist _ e d2)).
 Proof. by case: x=>[sx kx]; case: y=>[sy ky] []. Qed.
 
-Lemma LFixR_refl F x : @LFixR F x x.
+Lemma LFixR_refl S P {F : functor S P} (x : LFix S P) : LFixR x x.
 Proof.
   elim: x=>// shx k Ih; constructor=>//=x p1 p2.
   by rewrite (bool_irrelevance p1 p2); apply: Ih.
 Qed.
 
-Lemma LFixR_sym F x y : @LFixR F x y -> @LFixR F y x.
+Lemma LFixR_sym S P {F : functor S P} (x y : LFix S P) : LFixR x y -> LFixR y x.
 Proof.
   elim: x => sx kx Ih in y *; case: y => sy ky /=[/esym-Sxy E].
   split=>// e d1 d2; by apply/Ih/E.
 Qed.
 
-Lemma LFixR_trans F x y z : @LFixR F x y -> @LFixR F y z -> @LFixR F x z.
+Lemma LFixR_trans S P {F : functor S P} (x y z : LFix S P)
+  : LFixR x y -> LFixR y z -> LFixR x z.
 Proof.
   elim: x=> sx kx Ih in y z *; case: y=> sy ky/=; case: z=> sz kz/=.
   move=> [Sxy Exy] [Syz Eyz]; split; first by rewrite Sxy.
@@ -213,88 +249,95 @@ Proof.
   by apply/Eyz.
 Qed.
 
-Definition LFix_Eq F :=
-  {| eqRel := @LFixR F;
-     e_refl := @LFixR_refl F;
-     e_sym := @LFixR_sym F;
-     e_trans := @LFixR_trans F;
+Instance LFix_Eq S P {F : functor S P} : equivalence (LFix S P) :=
+  {| eqRel := @LFixR S P F;
+     e_refl := @LFixR_refl S P F;
+     e_sym := @LFixR_sym S P F;
+     e_trans := @LFixR_trans S P F;
   |}.
 
-Definition LFix F :=
-  {| Ty := LFixT F; Eq := @LFix_Eq F; |}.
-
-Definition l_in_f F (x : App F (LFix F)) : LFix F :=
+Definition l_in_f S P {F : functor S P} (x : App S P (LFix S P)) : LFix S P :=
   LFix_in (projT2 x).
 
-Lemma l_in_eq F x y : x =e y -> @l_in_f F x =e @l_in_f F y.
+Lemma l_in_eq S P {F : functor S P} x y : x =e y -> l_in_f x =e l_in_f y.
 Proof. by case: x=> sx kx; case: y=> sy ky/= [/=Es Ek]; split. Qed.
 
-Definition l_out_f F (x : LFix F) : App F (LFix F) :=
+Definition l_out_f S P {F : functor S P} (x : LFix S P) : App S P (LFix S P) :=
   match x with
   | LFix_in sh k => existT _ sh k
   end.
 
-Lemma l_out_eq F x y : x =e y -> @l_out_f F x  =e @l_out_f F y.
+Lemma l_out_eq S P (F : functor S P) x y : x =e y -> l_out_f x  =e l_out_f y.
 Proof. by case: x=> sx kx; case: y=> sy ky/= [/=Es Ek]; split. Qed.
 
-Definition l_in F : Alg F (LFix F) :=
-  {| func := _; f_eq := @l_in_eq F |}.
-Definition l_out F : CoAlg F (LFix F) :=
-  {| func := _; f_eq := @l_out_eq F |}.
+Definition l_in S P (F : functor S P) : Alg S P (LFix S P) :=
+  {| app := _; f_eq := @l_in_eq S P F |}.
+Arguments l_in {S P F}.
+Definition l_out S P (F : functor S P) : CoAlg S P (LFix S P) :=
+  {| app := _; f_eq := @l_out_eq S P F |}.
+Arguments l_out {S P F}.
 
-Lemma l_in_out F : l_in F \o l_out F =e id _.
+Lemma l_in_out S P (F : functor S P) : l_in \o l_out =e id (A:=LFix S P).
 Proof.
   move=>[s k]/=; split=>//= e d1 d2; rewrite (bool_irrelevance d1 d2).
   by apply: LFixR_refl.
 Qed.
 
-Lemma l_out_in F : l_out F \o l_in F =e id _.
+Lemma l_out_in  S P (F : functor S P)
+  : l_out \o l_in =e id (A:=App S P (LFix S P)).
 Proof.
   move=>[s k]/=; split=>//= e d1 d2; rewrite (bool_irrelevance d1 d2).
   by apply: LFixR_refl.
 Qed.
 
-Definition cata_f F A (g : Alg F A) : Ty (LFix F) -> Ty A
+Definition cata_f S P {F : functor S P} A {eA : equivalence A} (g : Alg S P A)
+  : LFix S P -> A
   := fix f x :=
        match x with
        | LFix_in s k => g (existT _ s (comp f k))
        end.
+Arguments cata_f {S P F A eA} g.
 
-Lemma cata_arr F A (g : Alg F A) :
-  forall x y, x =e y -> cata_f g x =e cata_f g y.
+Lemma cata_arr S P {F : functor S P} A {eA : equivalence A} (g : Alg S P A)
+  : forall x y, x =e y -> cata_f g x =e cata_f g y.
 Proof.
   move=> x y /=; elim: x => sx kx Ih/= in y *; case: y=> sy ky/= [Es Ek].
   apply/(f_eq g); split=>//= e d1 d2; by apply/Ih.
 Qed.
 
-Definition cata F A (g : Alg F A) : arrow (LFix F) A
-  := {| func := _; f_eq := cata_arr g |}.
+Definition cata S P {F : functor S P} A {eA : equivalence A} (g : Alg S P A)
+  : LFix S P ~> A
+  := {| app := _; f_eq := cata_arr g |}.
+Arguments cata {S P F A eA} g.
 
-Lemma cata_univ_r F A (g : Alg F A) (f : arrow (LFix F) A)
-  : f =e g \o fmapA F f \o @l_out F -> f =e cata g.
+Lemma cata_univ_r S P {F : functor S P} A {eA : equivalence A} (g : Alg S P A)
+      (f : LFix S P ~> A)
+  : f =e g \o fmap f \o l_out -> f =e cata g.
 Proof.
   move=> H.
   elim=> sx kx /= Ih.
-  rewrite (H _)/=; apply/f_eq; rewrite /fmapA_f/=.
+  rewrite (H _)/=; apply/f_eq; rewrite /fmap/=.
   split=>//= e d1 d2.
-  rewrite Ih (cont_irr (X:=LFix F) kx).
+  rewrite Ih (cont_irr (X:=LFix S P) kx).
   by auto with ffix.
 Qed.
 
-Lemma cata_univ_l F A (g : Alg F A) (f : arrow (LFix F) A)
-  : f =e cata g -> f =e g \o fmapA F f \o @l_out F.
+Lemma cata_univ_l S P {F : functor S P} A {eA : equivalence A} (g : Alg S P A)
+      (f : LFix S P ~> A)
+  : f =e cata g -> f =e g \o fmap f \o l_out.
 Proof.
   move=> H.
   elim=> sx kx /= Ih.
-  rewrite (H _)/=; apply/(f_eq g); rewrite /fmapA_f/=.
+  rewrite (H _)/=; apply/(f_eq g); rewrite /fmap/=.
   split=>//= e d1 d2.
-  rewrite Ih (cont_irr (X:=LFix F) kx).
+  rewrite Ih (cont_irr (X:=LFix S P) kx).
   rewrite -[cata_f g _]/(cata g _) -(H _) Ih.
   by auto with ffix.
 Qed.
 
-Lemma cata_univ F A (g : Alg F A) (f : arrow (LFix F) A)
-  : f =e cata g <-> f =e g \o fmapA F f \o @l_out F.
+Lemma cata_univ S P {F : functor S P} A {eA : equivalence A} (g : Alg S P A)
+      (f : LFix S P ~> A)
+  : f =e cata g <-> f =e g \o fmap f \o l_out.
 Proof. by split;[apply/cata_univ_l|apply/cata_univ_r]. Qed.
 
 (* Finite anamorphisms *)
