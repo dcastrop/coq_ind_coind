@@ -350,11 +350,15 @@ Lemma FinF_inv S P {F : functor S P} A {eA : equivalence A} (h : CoAlg S P A) x
 Proof. by case. Defined.
 
 (* Finite coalgebras *)
-Structure FCoAlg S P {F : functor S P} A {eA : equivalence A} :=
-  { coalg :> CoAlg S P A;
-    finite : forall x, FinF coalg x
-  }.
+Definition FCoAlg S P {F : functor S P} A {eA : equivalence A} :=
+  sig (fun f => forall x, FinF f x).
 Arguments FCoAlg S P {F} A {eA}.
+
+Coercion coalg S P {F : functor S P} A {eA : equivalence A}
+  : FCoAlg S P A -> A ~> App S P A := sval.
+
+Definition finite S P {F : functor S P} A {eA : equivalence A}
+  : forall (h : FCoAlg S P A) x, FinF h x := @proj2_sig _ _.
 
 Definition ana_f_ S P {F : functor S P} A {eA : equivalence A} (h : CoAlg S P A)
   : forall (x : A), FinF h x -> LFix S P
@@ -379,164 +383,200 @@ Lemma ana_arr S P {F : functor S P} A {eA : equivalence A} (h : FCoAlg S P A)
 Proof.
   rewrite /ana_f; move=> x y; move: x y (finite h x) (finite h y).
   fix Ih 3; move=> x y [x' Fx] [y' Fy]/=; split.
-  - by case: (f_eq (coalg h) H).
+  - by case: (f_eq h H).
   - move=> e d1 d2 /=; apply: Ih.
-    by move: (f_eq (coalg h) H)=> [E1 /(_ e d1 d2)].
+    by move: (f_eq h H)=> [E1 /(_ e d1 d2)].
 Qed.
 
 Definition ana S P (F : functor S P) A (eA : equivalence A)
            (h : FCoAlg S P A) : A ~> LFix S P
   := {| app := ana_f h; f_eq := ana_arr h |}.
 
-Lemma ana_univ_r F A (h : FCoAlg F A) (f : arrow A (LFix F))
-  : f =e @l_in F \o fmapA F f \o coalg h -> f =e ana h.
+Lemma ana_univ_r S P (F : functor S P) A (eA : equivalence A)
+      (h : FCoAlg S P A) (f : A ~> LFix S P)
+  : f =e l_in \o fmap f \o h -> f =e ana h.
 Proof.
   move=> H; rewrite /ana/ana_f/==>x; move: x (finite h x).
   fix Ih 2; move=> x [{}x Fx].
-  rewrite -[LFixR (f x) _]/(eqRel (Eq _) (f x) _) (H _)/=; split=>// e d1 d2.
+  rewrite -[LFixR (f x) _]/(@eqRel _ LFix_Eq (f x) _) (H _)/=; split=>// e d1 d2.
   rewrite (bool_irrelevance d2 d1); by apply: Ih.
 Qed.
 
-Lemma ana_univ_l F A (h : FCoAlg F A) (f : arrow A (LFix F))
-  : f =e ana h -> f =e @l_in F \o fmapA F f \o coalg h.
+Lemma ana_univ_l S P {F : functor S P} A {eA : equivalence A}
+      (h : FCoAlg S P A) (f : A ~> LFix S P)
+  : f =e ana h -> f =e l_in \o fmap f \o h.
 Proof.
   move=> H x; move: x (finite h x).
   fix Ih 2; move=> x [{}x Fx].
   rewrite (H _) /=/ana_f; move: (finite h x)=>Fx'; move: Fx' Fx.
   move=>[{}x Fx'] Fx/=; split=>// e d1 d2.
   rewrite (bool_irrelevance d2 d1).
-  rewrite -[LFixR _ _]/(eqRel (Eq _) _ _).
+  rewrite -[LFixR _ _]/(@eqRel _ LFix_Eq _ _).
   move: (H (projT2 (coalg h x) (exist _ e d1))); rewrite /ana/ana_f/=.
-  rewrite -![LFixR _ _]/(eqRel (Eq _) _ _).
+  rewrite -![LFixR _ _]/(@eqRel _ LFix_Eq _ _).
   rewrite ana_f_irr =><-/=; by apply: LFixR_refl.
 Qed.
 
-Lemma ana_univ F A (h : FCoAlg F A) (f : arrow A (LFix F))
-  : f =e ana h <-> f =e @l_in F \o fmapA F f \o coalg h.
+Lemma ana_univ S P {F : functor S P} A {eA : equivalence A}
+      (h : FCoAlg S P A) (f : A ~> LFix S P)
+  : f =e ana h <-> f =e l_in \o fmap f \o h.
 Proof. by split;[apply/ana_univ_l|apply/ana_univ_r]. Qed.
 
 (** Hylomorphisms **)
 
-Definition hylo_f_ F A B (g : Alg F B) (h : CoAlg F A)
+Print FinF_inv.
+
+Definition hylo_f_ S P {F : functor S P}
+           A B {eA : equivalence A} {eB : equivalence B}
+           (g : Alg S P B) (h : CoAlg S P A)
   : forall (x : A), FinF h x -> B
   := fix f x H :=
-       let hx := h x in
-       g (existT (fun sh=> sig (dom sh) -> B)
-                 (projT1 hx)
-                 (fun e => f (projT2 hx e) (FinF_inv H e))).
+       match h x as h0
+             return
+             (forall e : {x0 : P | dom (projT1 h0) x0}, FinF h (projT2 h0 e)) ->
+             B
+       with
+       | existT s_x c_x => fun H => g (existT _ s_x (fun e => f (c_x e) (H e)))
+       end (FinF_inv H).
 
-Lemma hylo_f_irr F A B (g : Alg F B) (h : CoAlg F A)
+Lemma hylo_f_irr S P {F : functor S P}
+           A B {eA : equivalence A} {eB : equivalence B}
+           (g : Alg S P B) (h : CoAlg S P A)
   : forall (x : A) (F1 F2 : FinF h x), hylo_f_ g F1 =e hylo_f_ g F2.
 Proof.
   move=>/=; fix Ih 2; move=> x [{}x Fx] F2; move: F2 Fx=> [{}x Fy] Fx/=.
+  move: (h x) Fx Fy => [s_x c_x]/= Fx Fy.
   apply/f_eq=>/=; split=>//= e d1 d2; rewrite (bool_irrelevance d2 d1)=>{d2}.
   by apply: Ih.
 Qed.
 
-Definition hylo_f F A B (g : Alg F B) (h : FCoAlg F A)
+Definition hylo_f S P {F : functor S P}
+           A B {eA : equivalence A} {eB : equivalence B}
+           (g : Alg S P B) (h : FCoAlg S P A)
   := fun x => hylo_f_ g (finite h x).
 
-Lemma hylo_arr F A B (g : Alg F B) (h : FCoAlg F A)
+Lemma hylo_arr S P {F : functor S P}
+           A B {eA : equivalence A} {eB : equivalence B}
+           (g : Alg S P B) (h : FCoAlg S P A)
   : forall x y, x =e y -> hylo_f g h x =e hylo_f g h y.
 Proof.
   rewrite /hylo_f; move=> x y; move: x y (finite h x) (finite h y).
-  fix Ih 3; move=> x y [x' Fx] [y' Fy]/= H; apply/f_eq=>/=.
-  case: (f_eq (coalg h) H)=>/= Es Ek; split=>//= e d1 d2.
-  by apply/Ih/Ek.
+  fix Ih 3; move=> x y [x' Fx] [y' Fy]/= H.
+  move: (@f_eq _ _ _ _ h _ _ H).
+  move: (h x') (h y') Fx Fy => [s_x c_x] [s_y c_y]/= Fx Fy [/=Es Ec].
+  apply/f_eq=>/=; split=>//= e d1 d2.
+  by apply/Ih/Ec.
 Qed.
 
-Definition hylo F A B (g : Alg F B) (h : FCoAlg F A) : arrow A B
-  := {| func := _ ; f_eq := hylo_arr g h |}.
+Definition hylo S P {F : functor S P}
+           A B {eA : equivalence A} {eB : equivalence B}
+           (g : Alg S P B) (h : FCoAlg S P A)
+  : A ~> B
+  := {| app := _ ; f_eq := hylo_arr g h |}.
 
-Lemma hylo_univ_r F A B (g : Alg F B) (h : FCoAlg F A) (f : arrow A B)
-  : f =e g \o fmapA F f \o coalg h -> f =e hylo g h.
+Lemma hylo_univ_r S P {F : functor S P}
+      A B {eA : equivalence A} {eB : equivalence B}
+      (g : Alg S P B) (h : FCoAlg S P A) (f : A ~> B)
+  : f =e g \o fmap f \o h -> f =e hylo g h.
 Proof.
   move=> H; rewrite /hylo/hylo_f/==>x; move: x (finite h x).
-  fix Ih 2; move=> x Fx; rewrite (H _)/=/fmapA_f/=; case: Fx=> {}x Fx/=.
+  fix Ih 2; move=> x Fx; rewrite (H _)/=/fmap/=; case: Fx=> {}x Fx/=.
+  move: (h x) Fx => [s_x c_x]/= Fx.
   apply/f_eq => /=; split=>//= e d1 d2.
   by rewrite (bool_irrelevance d2 d1); apply/Ih.
 Qed.
 
-Lemma hylo_univ_l F A B (g : Alg F B) (h : FCoAlg F A) (f : arrow A B)
-  : f =e hylo g h -> f =e g \o fmapA F f \o coalg h.
+Lemma hylo_univ_l S P {F : functor S P}
+      A B {eA : equivalence A} {eB : equivalence B}
+      (g : Alg S P B) (h : FCoAlg S P A) (f : A ~> B)
+  : f =e hylo g h -> f =e g \o fmap f \o h.
 Proof.
   move=> H x; move: x (finite h x).
   fix Ih 2; move=> x [{}x Fx].
   rewrite (H _) /=/hylo_f; move: (finite h x)=>Fx'; move: Fx' Fx.
-  move=>[{}x Fx'] Fx/=; apply/f_eq; split=>//= e d1 d2.
+  move=>[{}x Fx']/=; case: (h x) Fx' => /=s_x c_x Fx' Fx.
+  apply/f_eq; split=>//= e d1 d2.
   rewrite (bool_irrelevance d2 d1) (H _) /=/hylo_f/= hylo_f_irr.
   by eauto with ffix.
 Qed.
 
-Lemma hylo_univ F A B (g : Alg F B) (h : FCoAlg F A) (f : arrow A B)
-  : f =e hylo g h <-> f =e g \o fmapA F f \o coalg h.
+Lemma hylo_univ S P {F : functor S P}
+      A B {eA : equivalence A} {eB : equivalence B}
+      (g : Alg S P B) (h : FCoAlg S P A) (f : A ~> B)
+  : f =e hylo g h <-> f =e g \o fmap f \o h.
 Proof. by split;[apply/hylo_univ_l|apply/hylo_univ_r]. Qed.
 
-Corollary hylo_unr F A B (g : Alg F B) (h : FCoAlg F A)
-  : hylo g h =e g \o fmapA F (hylo g h) \o coalg h.
+Corollary hylo_unr S P {F : functor S P}
+      A B {eA : equivalence A} {eB : equivalence B}
+      (g : Alg S P B) (h : FCoAlg S P A)
+  : hylo g h =e g \o fmap (hylo g h) \o h.
 Proof. by rewrite -hylo_univ; reflexivity. Qed.
 
-Lemma fin_out F : forall x, FinF (@l_out F) x.
+Lemma fin_out S P (F : functor S P) : forall x, FinF l_out x.
 Proof. by elim=>s k Ih; constructor; apply: Ih. Qed.
 
-Definition f_out F : FCoAlg F (LFix F) :=
-  {| coalg := @l_out F; finite := @fin_out F|}.
+Definition f_out S P (F : functor S P) : FCoAlg S P (LFix S P) :=
+  exist _ _ (@fin_out S P F).
+Arguments f_out {S P F}.
 
-Lemma hylo_cata F B (g : Alg F B)
-  : cata g =e hylo g (f_out F).
+Lemma hylo_cata S P {F : functor S P} B {eB : equivalence B} (g : Alg S P B)
+  : cata g =e hylo g f_out.
 Proof. rewrite hylo_univ; apply/cata_univ; reflexivity. Qed.
 
-Lemma hylo_ana F A (h : FCoAlg F A)
-  : ana h =e hylo (l_in F) h.
+Lemma hylo_ana  S P {F : functor S P} A {eA : equivalence A} (h : FCoAlg S P A)
+  : ana h =e hylo l_in h.
 Proof. by rewrite hylo_univ; apply/ana_univ; reflexivity. Qed.
 
-Lemma compA A B C D (f : arrow C D) (g : arrow B C) (h : arrow A B)
+Lemma compA A B C D {eA : equivalence A} {eB : equivalence B}
+      {eC : equivalence C} {eD : equivalence D}
+      (f : C ~> D) (g : B ~> C) (h : A ~> B)
   : f \o (g \o h) =e (f \o g) \o h.
 Proof. move=>x; by eauto with ffix. Qed.
 
-Lemma idKl A B (f : arrow A B)
-  : f \o id A =e f.
+Lemma idKl A B {eA : equivalence A} {eB : equivalence B} (f : A ~> B)
+  : f \o id =e f.
 Proof. move=> x; by eauto with ffix. Qed.
 
-Lemma idKr A B (f : arrow A B)
-  : id B \o f  =e f.
+Lemma idKr A B {eA : equivalence A} {eB : equivalence B} (f : A ~> B)
+  : id \o f =e f.
 Proof. move=> x; by eauto with ffix. Qed.
 
-Lemma compKl A B C (f : arrow B C) (g1 g2 : arrow A B)
-  : g1 =e g2 -> f \o g1 =e f \o g2.
-Proof. by move=>->; eauto with ffix. Qed.
+Lemma splitC A B C
+      {eA : equivalence A} {eB : equivalence B} {eC : equivalence C}
+      (f1 f2 : B ~> C) (g1 g2 : A ~> B)
+  : f1 =e f2 -> g1 =e g2 -> f1 \o g1 =e f2 \o g2.
+Proof. by move=>->->; eauto with ffix. Qed.
 
-Lemma compKr A B C (f1 f2: arrow B C) (g : arrow A B)
-  : f1 =e f2 -> f1 \o g =e f2 \o g.
-Proof. by move=>->; eauto with ffix. Qed.
-
-Lemma hylo_fusion_l F A B C
-      (h1 : FCoAlg F A) (g1 : Alg F B) (g2 : Alg F C) (f2 : arrow B C)
-      (E2 : f2 \o g1 =e g2 \o fmapA F f2)
+Lemma hylo_fusion_l S P {F : functor S P} A B C
+      {eA : equivalence A} {eB : equivalence B} {eC : equivalence C}
+      (h1 : FCoAlg S P A) (g1 : Alg S P B) (g2 : Alg S P C) (f2 : B ~> C)
+      (E2 : f2 \o g1 =e g2 \o fmap f2)
   : f2 \o hylo g1 h1 =e hylo g2 h1.
 Proof.
   rewrite hylo_univ fmap_comp.
   rewrite compA -E2 -compA -compA.
-  apply/compKl.
+  apply/splitC; first by reflexivity.
   rewrite compA -hylo_univ.
   reflexivity.
 Qed.
 
-Lemma hylo_fusion_r F A B C
-      (h1 : FCoAlg F B) (g1 : Alg F C) (h2 : FCoAlg F A)
-      (f1 : arrow A B) (E1 : h1 \o f1 =e fmapA F f1 \o h2)
+Lemma hylo_fusion_r S P {F : functor S P} A B C
+      {eA : equivalence A} {eB : equivalence B} {eC : equivalence C}
+      (h1 : FCoAlg S P B) (g1 : Alg S P C) (h2 : FCoAlg S P A)
+      (f1 : A ~> B) (E1 : h1 \o f1 =e fmap f1 \o h2)
   : hylo g1 h1 \o f1 =e hylo g1 h2.
 Proof.
   rewrite hylo_univ fmap_comp.
   rewrite -!compA -E1 !compA.
-  apply/compKr.
+  apply/splitC; last by reflexivity.
   rewrite -hylo_univ.
   reflexivity.
 Qed.
 
-Lemma deforest F A B C
-      (h1 : FCoAlg F A) (g1 : Alg F B) (h2 : FCoAlg F B) (g2 : Alg F C)
-      (INV: h2 \o g1 =e id _)
+Lemma deforest S P {F : functor S P} A B C
+      {eA : equivalence A} {eB : equivalence B} {eC : equivalence C}
+      (h1 : FCoAlg S P A) (g1 : Alg S P B) (h2 : FCoAlg S P B) (g2 : Alg S P C)
+      (INV: h2 \o g1 =e id)
   : hylo g2 h2 \o hylo g1 h1 =e hylo g2 h1.
 Proof.
   apply/hylo_fusion_l.
@@ -550,39 +590,39 @@ Proof.
   reflexivity.
 Qed.
 
-Corollary cata_ana_hylo F A B (g : Alg F B) (h : FCoAlg F A)
+Corollary cata_ana_hylo S P (F : functor S P)
+          A B {eA : equivalence A} {eB : equivalence B}
+          (g : Alg S P B) (h : FCoAlg S P A)
   : cata g \o ana h =e hylo g h.
 Proof. by rewrite hylo_cata hylo_ana; apply/deforest/l_out_in. Qed.
 
 Section ExQsort.
 
   (* Defining a tree *)
-  Inductive Ts A :=
-  | Leaf | Node (ELEM : A).
-  Inductive Tp := | Lbranch | Rbranch.
-  Definition t_dom A (s : Ts A) : Tp -> bool :=
+  Inductive Ts A := | Leaf | Node (ELEM : A). (* shapes *)
+  Inductive Tp := | Lbranch | Rbranch. (* positions *)
+  Definition t_dom A (s : Ts A) : Tp -> bool := (* position valid in shape? *)
     match s with
     | Node _ => fun=>true
     | _ => fun=> false
     end.
-  Definition Tree A :=
-    {| Shape := Ts A;
-       Position := Tp;
-       dom := @t_dom A;
-    |}.
+  Instance tree_func A : functor (Ts A) Tp :=
+    { dom := @t_dom  A
+    }.
+
   Lemma dom_leaf_false A : {y | t_dom (Leaf A) y} -> False.
   Proof. by move=>[]. Qed.
   Definition dom_leaf A B (x : {y | t_dom (Leaf A) y}) : B :=
     False_rect _ (dom_leaf_false x).
 
-  Definition a_leaf A X : App (Tree A) X := existT _ (Leaf A) (@dom_leaf A _).
-  Definition a_node A X (x : A) (l r : X) : App (Tree A) X :=
+  Definition a_leaf A X : App (Ts A) Tp X := existT _ (Leaf A) (@dom_leaf A _).
+  Definition a_node A X (x : A) (l r : X) : App (Ts A) Tp X :=
     existT _ (Node x) (fun p => match proj1_sig p with
                                 | Lbranch => l
                                 | Rbranch => r
                                 end).
 
-  Definition a_out A X (x : App (Tree A) X)
+  Definition a_out A X (x : App (Ts A) Tp X)
     : option (A * X * X)
     := match x with
        | existT s k =>
@@ -597,28 +637,35 @@ Section ExQsort.
        end.
   (* end tree *)
 
-  Definition m_merge (x : App (Tree nat) (seq nat)) : Ty (seq nat) :=
-    match a_out x with
-    | None => [::]
-    | Some (h, l, r) => l ++ h :: r
-    end.
+  Instance eq_seq_nat : equivalence (seq nat) :=
+    { eqRel := eq;
+      e_refl := @erefl (seq nat);
+      e_sym := @esym (seq nat);
+      e_trans := @etrans (seq nat);
+    }.
+
+  Definition m_merge (x : App (Ts nat) Tp (seq nat)) : seq nat :=
+    match projT1 x as sh return (sig (dom sh) -> seq nat) -> seq nat with
+    | Leaf => fun=>[::]
+    | Node h => fun k=> k (exist _ Lbranch is_true_true) ++ h :: k (exist _ Rbranch is_true_true)
+    end (projT2 x).
   Lemma m_merge_arr : forall x y, x =e y -> m_merge x =e m_merge y.
   Proof.
     move=>[[|hx]/= kx]/= [[|hy]//= ky] [//= [<-]] H.
     by rewrite /m_merge/= !H.
   Qed.
-  Definition merge : Alg (Tree nat) (seq nat)
-    := {| func := m_merge; f_eq := m_merge_arr |}.
+  Definition merge : Alg (Ts nat) Tp (seq nat)
+    := {| app := m_merge; f_eq := m_merge_arr |}.
 
-  Definition m_split (x : Ty (seq nat)) : App (Tree nat) (seq nat) :=
+  Definition m_split (x : seq nat) : App (Ts nat) Tp (seq nat) :=
     match x with
     | [::] => a_leaf _ _
     | h :: t => a_node h [seq x <- t | x <= h] [seq x <- t | x > h]
     end.
   Lemma m_split_arr : forall x y, x =e y -> m_split x =e m_split y.
   Proof. by move=> x y ->; eauto with ffix. Qed.
-  Definition c_split : CoAlg (Tree nat) (seq nat)
-    := {| func := m_split; f_eq := m_split_arr |}.
+  Definition c_split : CoAlg (Ts nat) Tp (seq nat)
+    := {| app := m_split; f_eq := m_split_arr |}.
 
   (* Needs to be defined, otherwise msort does not reduce! *)
   Lemma split_fin : forall x, FinF c_split x.
@@ -631,19 +678,16 @@ Section ExQsort.
       by case: e; rewrite size_filter (leq_trans (count_size _ _)).
   Defined.
 
-  Definition tsplit := {| coalg := c_split; finite := split_fin |}.
-  Definition msort : seq nat -> seq nat := func (hylo merge tsplit).
+  Definition tsplit : FCoAlg (Ts nat) Tp (seq nat)
+    := exist _ c_split split_fin.
+  Definition msort : seq nat -> seq nat := hylo merge tsplit.
 End ExQsort.
 
 From Coq Require Extraction ExtrOcamlBasic ExtrOcamlNatInt.
-Set Extraction TypeExpand.
+(* Set Extraction TypeExpand. *)
 Set Extraction Flag 2047.
-Extract Inductive sigT => "(*)"  [ "(,)" ].
-Extraction Inline Ty.
-Extraction Inline Eq.
-Extraction Inline func.
+Extraction Inline app.
 Extraction Inline coalg.
-Extraction Inline getTy.
 Extraction Inline hylo.
 Extraction Inline hylo_f.
 Extraction Inline hylo_f_.
